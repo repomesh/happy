@@ -5,6 +5,8 @@
   English only, as iOS's are.
 -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="settings_search_placeholder">Search settings</string>
+    <string name="settings_nothing_found">Nothing found</string>
     <string name="settings_add_agent">Add Agent</string>
     <string name="settings_edit_agent">Edit agent</string>
     <string name="settings_change_avatar">Change avatar</string>

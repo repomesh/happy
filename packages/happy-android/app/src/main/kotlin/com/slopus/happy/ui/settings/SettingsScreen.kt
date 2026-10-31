@@ -2,9 +2,7 @@ package com.slopus.happy.ui.settings
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -13,8 +11,7 @@ import com.slopus.happy.model.Profile
 import com.slopus.happy.ui.components.Avatar
 import com.slopus.happy.ui.components.Icon
 import com.slopus.happy.ui.components.Ionicon
-import com.slopus.happy.ui.components.Item
-import com.slopus.happy.ui.components.ItemGroup
+import com.slopus.happy.ui.components.HeaderTags
 import com.slopus.happy.ui.components.ItemList
 import com.slopus.happy.ui.components.Screen
 import com.slopus.happy.ui.components.StackHeader
@@ -35,6 +32,11 @@ object SettingsTags {
     const val ENTER_TERMINAL = "settings.row.enterTerminal"
     const val VERSION = "settings.version"
     const val SUPPORT = "settings.support"
+    const val WHATS_NEW = "settings.row.whatsNew"
+    const val GITHUB = "settings.row.github"
+    const val REPORT_ISSUE = "settings.row.reportIssue"
+    const val PRIVACY = "settings.row.privacy"
+    const val TERMS = "settings.row.terms"
 }
 
 /** SettingsView.tsx, Android: the links and the icon colours the older pages still use. */
@@ -100,6 +102,78 @@ class HappySettingsActions(
 )
 
 /**
+ * A Happy account's cards between the accounts card and Support us
+ * (iOS's `rowsFor`): Account and Backup & Restore; Appearance, Language,
+ * Voice Assistant and Agents; the terminal's Scan QR code and Enter URL.
+ */
+@Composable
+fun happySettingsSections(actions: HappySettingsActions, connectingTerminal: Boolean): List<SettingsSection> = listOf(
+    SettingsSection(
+        listOf(
+            SettingsEntry(
+                id = SettingsTags.ACCOUNT,
+                title = stringResource(R.string.settings_account),
+                icon = { SettingsTile(Ionicon.PersonCircleOutline, SettingsTiles.blue) },
+                onClick = actions.onAccount,
+            ),
+            SettingsEntry(
+                id = SettingsTags.BACKUP,
+                title = stringResource(R.string.settings_backup_restore),
+                icon = { SettingsTile(Ionicon.KeyOutline, SettingsTiles.green) },
+                onClick = actions.onBackup,
+            ),
+        ),
+    ),
+    SettingsSection(
+        listOf(
+            SettingsEntry(
+                id = SettingsTags.APPEARANCE,
+                title = stringResource(R.string.settings_appearance),
+                icon = { SettingsTile(Ionicon.ColorPaletteOutline, SettingsTiles.purple) },
+                onClick = actions.onAppearance,
+            ),
+            SettingsEntry(
+                id = SettingsTags.LANGUAGE,
+                title = stringResource(R.string.settings_language_title),
+                icon = { SettingsTile(Ionicon.LanguageOutline, SettingsTiles.green) },
+                onClick = actions.onLanguage,
+            ),
+            SettingsEntry(
+                id = SettingsTags.VOICE,
+                title = stringResource(R.string.settings_voice_assistant),
+                icon = { SettingsTile(Ionicon.MicOutline, SettingsTiles.orange) },
+                onClick = actions.onVoice,
+            ),
+            SettingsEntry(
+                id = SettingsTags.AGENTS,
+                title = stringResource(R.string.settings_agents),
+                icon = { SettingsTile(Ionicon.OptionsOutline, SettingsTiles.teal) },
+                onClick = actions.onAgents,
+            ),
+        ),
+    ),
+    SettingsSection(
+        listOf(
+            SettingsEntry(
+                id = SettingsTags.SCAN_TERMINAL,
+                title = stringResource(R.string.settings_scan_qr_code_to_authenticate),
+                icon = { SettingsTile(Ionicon.QrCodeOutline, SettingsTiles.indigo) },
+                onClick = actions.onScanTerminal,
+                loading = connectingTerminal,
+                chevron = false,
+            ),
+            SettingsEntry(
+                id = SettingsTags.ENTER_TERMINAL,
+                title = stringResource(R.string.connect_enter_url_manually),
+                icon = { SettingsTile(Ionicon.LinkOutline, SettingsTiles.indigo) },
+                onClick = actions.onEnterTerminal,
+                chevron = false,
+            ),
+        ),
+    ),
+)
+
+/**
  * A Happy account's Settings, as iOS's SettingsViewController lays out a
  * Happy account's page: its picture, name and "@username" (or "Happy
  * account") at the top ([SettingsHeader]); every account on the phone with
@@ -108,6 +182,11 @@ class HappySettingsActions(
  * Enter URL; Support us; About; and Logout. Rows carry iOS's coloured
  * tiles ([SettingsTile]). happy-app's Connected Accounts (Claude Code,
  * GitHub) are gone from here, as from iOS.
+ *
+ * Search is the bar's (iOS's integrated search button): the bar becomes a
+ * field and the page what it finds ([SettingsSearchResults]): the accounts
+ * by name, this page's rows and [pages], the rows of Account, Backup &
+ * Restore, Voice and Language, which open their page at the row.
  *
  * The Version detail is "versionName (versionCode)": happy-app shows
  * "version / runtime N", its OTA runtime, and a native build has none; the
@@ -122,71 +201,33 @@ fun SettingsScreen(
     actions: HappySettingsActions = HappySettingsActions(),
     aboutActions: AboutActions = AboutActions(),
     connectingTerminal: Boolean = false,
+    pages: List<SettingsEntry> = emptyList(),
 ) {
-    Screen(header = { StackHeader(stringResource(R.string.settings_title), actions.onBack) }) {
-        ItemList {
-            SettingsHeader(profile)
-            AccountsCard(accounts, accountActions)
-            ItemGroup {
-                Item(
-                    title = stringResource(R.string.settings_account),
-                    icon = { SettingsTile(Ionicon.PersonCircleOutline, SettingsTiles.blue) },
-                    onClick = actions.onAccount,
-                    modifier = Modifier.testTag(SettingsTags.ACCOUNT),
-                )
-                Item(
-                    title = stringResource(R.string.settings_backup_restore),
-                    icon = { SettingsTile(Ionicon.KeyOutline, SettingsTiles.green) },
-                    onClick = actions.onBackup,
-                    modifier = Modifier.testTag(SettingsTags.BACKUP),
-                )
+    val search = rememberSettingsSearch()
+    val sections = happySettingsSections(actions, connectingTerminal) +
+        SettingsSection(listOf(supportEntry(about, aboutActions))) +
+        aboutSection(about, aboutActions)
+    Screen(
+        header = {
+            if (search.searching) {
+                SettingsSearchBar(search, HeaderTags.BAR)
+            } else {
+                StackHeader(stringResource(R.string.settings_title), actions.onBack) { SettingsSearchButton(search) }
             }
-            ItemGroup {
-                Item(
-                    title = stringResource(R.string.settings_appearance),
-                    icon = { SettingsTile(Ionicon.ColorPaletteOutline, SettingsTiles.purple) },
-                    onClick = actions.onAppearance,
-                    modifier = Modifier.testTag(SettingsTags.APPEARANCE),
-                )
-                Item(
-                    title = stringResource(R.string.settings_language_title),
-                    icon = { SettingsTile(Ionicon.LanguageOutline, SettingsTiles.green) },
-                    onClick = actions.onLanguage,
-                    modifier = Modifier.testTag(SettingsTags.LANGUAGE),
-                )
-                Item(
-                    title = stringResource(R.string.settings_voice_assistant),
-                    icon = { SettingsTile(Ionicon.MicOutline, SettingsTiles.orange) },
-                    onClick = actions.onVoice,
-                    modifier = Modifier.testTag(SettingsTags.VOICE),
-                )
-                Item(
-                    title = stringResource(R.string.settings_agents),
-                    icon = { SettingsTile(Ionicon.OptionsOutline, SettingsTiles.teal) },
-                    onClick = actions.onAgents,
-                    modifier = Modifier.testTag(SettingsTags.AGENTS),
-                )
+        },
+        avoidKeyboard = search.searching,
+    ) {
+        if (search.searching) {
+            val profiles = settingsProfileEntries(accounts, accountActions.onSwitch)
+            val rows = listOf(addAgentEntry(accountActions)) + sections.flatMap { it.rows } + pages
+            SettingsSearchResults(search, settingsSearchResults(search.query, profiles, emptyList(), rows))
+        } else {
+            ItemList {
+                SettingsHeader(profile)
+                AccountsCard(accounts, accountActions)
+                for (section in sections) SettingsCard(section)
+                RemoveCard(agent = false, name = profile.name, onRemove = actions.onSignOut)
             }
-            ItemGroup {
-                Item(
-                    title = stringResource(R.string.settings_scan_qr_code_to_authenticate),
-                    icon = { SettingsTile(Ionicon.QrCodeOutline, SettingsTiles.indigo) },
-                    onClick = actions.onScanTerminal,
-                    loading = connectingTerminal,
-                    showChevron = false,
-                    modifier = Modifier.testTag(SettingsTags.SCAN_TERMINAL),
-                )
-                Item(
-                    title = stringResource(R.string.connect_enter_url_manually),
-                    icon = { SettingsTile(Ionicon.LinkOutline, SettingsTiles.indigo) },
-                    onClick = actions.onEnterTerminal,
-                    showChevron = false,
-                    modifier = Modifier.testTag(SettingsTags.ENTER_TERMINAL),
-                )
-            }
-            SupportCard(about, aboutActions)
-            AboutCard(about, aboutActions)
-            RemoveCard(agent = false, name = profile.name, onRemove = actions.onSignOut)
         }
     }
 }

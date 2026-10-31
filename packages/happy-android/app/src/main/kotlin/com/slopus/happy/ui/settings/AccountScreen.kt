@@ -35,6 +35,7 @@ import com.slopus.happy.ui.components.ItemGroup
 import com.slopus.happy.ui.components.ItemList
 import com.slopus.happy.ui.components.Screen
 import com.slopus.happy.ui.components.StackHeader
+import com.slopus.happy.ui.components.revealRow
 import com.slopus.happy.ui.theme.AppMono
 import com.slopus.happy.ui.theme.HappyTheme
 import com.slopus.happy.ui.theme.happyTextStyle
@@ -42,6 +43,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 object AccountTags {
+    const val NAME = "account.name"
+    const val USERNAME = "account.username"
+    const val ANALYTICS = "account.analytics"
+    const val PUSH_PERMISSION = "account.pushPermission"
+    const val PUSH_REQUEST = "account.pushRequest"
+    const val PUSH_REREGISTER = "account.pushReregister"
     const val ANALYTICS_ID = "account.analyticsId"
     const val PUBLIC_ID = "account.publicId"
     const val SERVER = "account.server"
@@ -58,6 +65,13 @@ object AccountSpec {
     val secretPaddingHorizontal = 16.dp
     val secretPaddingVertical = 14.dp
     val secretText = happyTextStyle(fontSize = 15, lineHeight = 22, letterSpacing = 0.5f, family = AppMono)
+}
+
+/** account.tsx's push rows, spelled out in English there. */
+object PushRows {
+    const val PERMISSION = "Permission"
+    const val REQUEST = "Request Permission Again"
+    const val REREGISTER = "Re-register This Device"
 }
 
 /** What the push rows show (account.tsx's push state). */
@@ -134,10 +148,10 @@ fun AccountScreen(
         ItemList {
             ItemGroup(footer = stringResource(R.string.settings_copy_id_footer)) {
                 if (displayName != null) {
-                    Item(title = stringResource(R.string.settings_account_name), detail = displayName, showChevron = false)
+                    Item(title = stringResource(R.string.settings_account_name), detail = displayName, showChevron = false, modifier = Modifier.revealRow(AccountTags.NAME))
                 }
                 if (username != null) {
-                    Item(title = stringResource(R.string.settings_username), detail = "@$username", showChevron = false)
+                    Item(title = stringResource(R.string.settings_username), detail = "@$username", showChevron = false, modifier = Modifier.revealRow(AccountTags.USERNAME))
                 }
                 val analyticsId = stringResource(R.string.settings_account_anonymous_id)
                 Item(
@@ -145,7 +159,7 @@ fun AccountScreen(
                     detail = anonId ?: notAvailable,
                     showChevron = false,
                     onClick = anonId?.let { { copied(analyticsId, it) } },
-                    modifier = Modifier.testTag(AccountTags.ANALYTICS_ID),
+                    modifier = Modifier.revealRow(AccountTags.ANALYTICS_ID),
                 )
                 val publicIdTitle = stringResource(R.string.settings_account_public_id)
                 Item(
@@ -153,13 +167,13 @@ fun AccountScreen(
                     detail = publicId ?: notAvailable,
                     showChevron = false,
                     onClick = publicId?.let { { copied(publicIdTitle, it) } },
-                    modifier = Modifier.testTag(AccountTags.PUBLIC_ID),
+                    modifier = Modifier.revealRow(AccountTags.PUBLIC_ID),
                 )
                 Item(
                     title = stringResource(R.string.settings_account_server),
                     detail = server ?: stringResource(R.string.settings_default_server),
                     showChevron = false,
-                    modifier = Modifier.testTag(AccountTags.SERVER),
+                    modifier = Modifier.revealRow(AccountTags.SERVER),
                 )
             }
 
@@ -177,6 +191,7 @@ fun AccountScreen(
                         )
                     },
                     showChevron = false,
+                    modifier = Modifier.revealRow(AccountTags.ANALYTICS),
                 )
             }
 
@@ -184,28 +199,31 @@ fun AccountScreen(
             ItemGroup(footer = "${PushText.subtitle(push.permission)} Shows every push token registered on your account. Tap an old token to delete it.") {
                 val unsupported = push.permission?.status == PushPermissionStatus.Unsupported
                 Item(
-                    title = "Permission",
+                    title = PushRows.PERMISSION,
                     detail = PushText.label(push.permission),
                     icon = { SettingsTile(Ionicon.NotificationsOutline, SettingsTiles.red) },
                     loading = push.loading,
                     showChevron = false,
+                    modifier = Modifier.revealRow(AccountTags.PUSH_PERMISSION),
                 )
                 Item(
-                    title = "Request Permission Again",
+                    title = PushRows.REQUEST,
                     icon = { SettingsTile(Ionicon.ShieldCheckmarkOutline, SettingsTiles.green) },
                     onClick = onRequestPush,
                     loading = push.requesting,
                     enabled = !(push.requesting || push.loading || unsupported),
                     showChevron = false,
+                    modifier = Modifier.revealRow(AccountTags.PUSH_REQUEST),
                 )
                 Item(
-                    title = "Re-register This Device",
+                    title = PushRows.REREGISTER,
                     subtitle = push.currentToken?.let { "Current token ${PushText.fingerprint(it)}" },
                     icon = { SettingsTile(Ionicon.RefreshOutline, SettingsTiles.orange) },
                     onClick = onRefreshPush,
                     loading = push.refreshing,
                     enabled = !(push.refreshing || push.loading),
                     showChevron = false,
+                    modifier = Modifier.revealRow(AccountTags.PUSH_REREGISTER),
                 )
             }
 
@@ -287,7 +305,7 @@ fun BackupScreen(
                     icon = { SettingsTile(if (revealed) Ionicon.EyeOffOutline else Ionicon.EyeOutline, SettingsTiles.orange) },
                     onClick = { revealed = !revealed },
                     showChevron = false,
-                    modifier = Modifier.testTag(AccountTags.SECRET_KEY),
+                    modifier = Modifier.revealRow(AccountTags.SECRET_KEY),
                 )
                 if (revealed) {
                     Text(
@@ -318,7 +336,7 @@ fun BackupScreen(
                     onClick = onLinkNewDevice,
                     enabled = !linkingDevice,
                     showChevron = false,
-                    modifier = Modifier.testTag(AccountTags.LINK_DEVICE),
+                    modifier = Modifier.revealRow(AccountTags.LINK_DEVICE),
                 )
             }
             ItemGroup(footer = stringResource(R.string.settings_restore_account_footer)) {
@@ -326,7 +344,7 @@ fun BackupScreen(
                     title = stringResource(R.string.settings_restore_account),
                     icon = { SettingsTile(Ionicon.KeyOutline, SettingsTiles.blue) },
                     onClick = onRestore,
-                    modifier = Modifier.testTag(AccountTags.RESTORE),
+                    modifier = Modifier.revealRow(AccountTags.RESTORE),
                 )
             }
         }
@@ -334,3 +352,59 @@ fun BackupScreen(
 
     alert?.let { HappyAlert(alert = it, onDismiss = { alert = null }) }
 }
+
+/**
+ * Account's rows as Settings' search finds them (iOS's page rows less the
+ * push tokens, which are read only once the page shows): found, [open]
+ * opens the page at the row.
+ */
+@Composable
+fun accountPageEntries(
+    anonId: String?,
+    publicId: String?,
+    displayName: String?,
+    username: String?,
+    server: String?,
+    open: (row: String) -> Unit,
+): List<SettingsEntry> {
+    val notAvailable = stringResource(R.string.settings_account_not_available)
+    fun row(id: String, title: String, detail: String? = null, icon: (@Composable () -> Unit)? = null) =
+        SettingsEntry(id = id, title = title, detail = detail, icon = icon, onClick = { open(id) }, page = true)
+    return listOfNotNull(
+        displayName?.let { row(AccountTags.NAME, stringResource(R.string.settings_account_name), it) },
+        username?.let { row(AccountTags.USERNAME, stringResource(R.string.settings_username), "@$it") },
+        row(AccountTags.ANALYTICS_ID, stringResource(R.string.settings_account_anonymous_id), anonId ?: notAvailable),
+        row(AccountTags.PUBLIC_ID, stringResource(R.string.settings_account_public_id), publicId ?: notAvailable),
+        row(AccountTags.SERVER, stringResource(R.string.settings_account_server), server ?: stringResource(R.string.settings_default_server)),
+        row(AccountTags.ANALYTICS, stringResource(R.string.settings_account_analytics)) { SettingsTile(Ionicon.AnalyticsOutline, SettingsTiles.blue) },
+        row(AccountTags.PUSH_PERMISSION, PushRows.PERMISSION) { SettingsTile(Ionicon.NotificationsOutline, SettingsTiles.red) },
+        row(AccountTags.PUSH_REQUEST, PushRows.REQUEST) { SettingsTile(Ionicon.ShieldCheckmarkOutline, SettingsTiles.green) },
+        row(AccountTags.PUSH_REREGISTER, PushRows.REREGISTER) { SettingsTile(Ionicon.RefreshOutline, SettingsTiles.orange) },
+    )
+}
+
+/** Backup & Restore's rows as Settings' search finds them (the key hidden, as the page opens). */
+@Composable
+fun backupPageEntries(open: (row: String) -> Unit): List<SettingsEntry> = listOf(
+    SettingsEntry(
+        id = AccountTags.SECRET_KEY,
+        title = stringResource(R.string.settings_show_secret_key),
+        icon = { SettingsTile(Ionicon.EyeOutline, SettingsTiles.orange) },
+        onClick = { open(AccountTags.SECRET_KEY) },
+        page = true,
+    ),
+    SettingsEntry(
+        id = AccountTags.LINK_DEVICE,
+        title = stringResource(R.string.settings_account_link_new_device),
+        icon = { SettingsTile(Ionicon.QrCodeOutline, SettingsTiles.indigo) },
+        onClick = { open(AccountTags.LINK_DEVICE) },
+        page = true,
+    ),
+    SettingsEntry(
+        id = AccountTags.RESTORE,
+        title = stringResource(R.string.settings_restore_account),
+        icon = { SettingsTile(Ionicon.KeyOutline, SettingsTiles.blue) },
+        onClick = { open(AccountTags.RESTORE) },
+        page = true,
+    ),
+)

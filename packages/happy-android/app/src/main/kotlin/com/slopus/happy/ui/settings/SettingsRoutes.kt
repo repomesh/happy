@@ -26,6 +26,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
+import androidx.navigation.toRoute
+import com.slopus.happy.ui.components.ProvideRowReveal
+import com.slopus.happy.ui.voice.voicePageEntries
 import com.slopus.happy.AppGraph
 import com.slopus.happy.BuildConfig
 import com.slopus.happy.R
@@ -59,10 +62,11 @@ import kotlinx.serialization.Serializable
 import com.slopus.happy.ui.voice.voiceRoutes
 import com.slopus.happy.ui.voice.VoiceSettingsRoute
 
-@Serializable data object AccountRoute
-@Serializable data object BackupRoute
+// A page Settings' search opens has [reveal], the row it found there ([ProvideRowReveal]).
+@Serializable data class AccountRoute(val reveal: String? = null)
+@Serializable data class BackupRoute(val reveal: String? = null)
 @Serializable data object AppearanceRoute
-@Serializable data object LanguageRoute
+@Serializable data class LanguageRoute(val reveal: String? = null)
 @Serializable data object AgentsRoute
 @Serializable data object ConnectClaudeRoute
 @Serializable data object ChangelogRoute
@@ -71,8 +75,8 @@ import com.slopus.happy.ui.voice.VoiceSettingsRoute
 fun NavGraphBuilder.settingsRoutes(graph: AppGraph, nav: NavHostController) {
     voiceRoutes(graph, nav)
     composable<SettingsRoute> { SettingsIndex(graph, nav) }
-    composable<AccountRoute> { Account(graph, nav) }
-    composable<BackupRoute> { Backup(graph, nav) }
+    composable<AccountRoute> { entry -> ProvideRowReveal(entry.toRoute<AccountRoute>().reveal) { Account(graph, nav) } }
+    composable<BackupRoute> { entry -> ProvideRowReveal(entry.toRoute<BackupRoute>().reveal) { Backup(graph, nav) } }
     composable<AppearanceRoute> { Appearance(graph, nav) }
     composable<AgentsRoute> { Agents(graph, nav) }
     composable<ConnectClaudeRoute> { ConnectClaudeScreen(onBack = { nav.popBackStack() }) }
@@ -81,17 +85,19 @@ fun NavGraphBuilder.settingsRoutes(graph: AppGraph, nav: NavHostController) {
         val changelog = remember(resources) { Changelog.bundled(resources) }
         ChangelogScreen(changelog, onViewed = graph.changelog::markViewed, onBack = { nav.popBackStack() })
     }
-    composable<LanguageRoute> {
+    composable<LanguageRoute> { entry ->
         val settings by graph.settings.settings.collectAsStateWithLifecycle()
-        LanguageScreen(
-            preferredLanguage = settings.preferredLanguage,
-            detectedLanguageName = Languages.detectedName(graph.language.deviceLocales()),
-            onSelect = { code ->
-                graph.settings.change { it.copy(preferredLanguage = code) }
-                graph.language.apply(code)
-            },
-            onBack = { nav.popBackStack() },
-        )
+        ProvideRowReveal(entry.toRoute<LanguageRoute>().reveal) {
+            LanguageScreen(
+                preferredLanguage = settings.preferredLanguage,
+                detectedLanguageName = Languages.detectedName(graph.language.deviceLocales()),
+                onSelect = { code ->
+                    graph.settings.change { it.copy(preferredLanguage = code) }
+                    graph.language.apply(code)
+                },
+                onBack = { nav.popBackStack() },
+            )
+        }
     }
 }
 
@@ -114,7 +120,7 @@ private fun Appearance(graph: AppGraph, nav: NavHostController) {
         settings = settings,
         onSettingsChange = graph.settings::change,
         languageDetail = languageDetail,
-        onLanguage = { nav.navigate(LanguageRoute) },
+        onLanguage = { nav.navigate(LanguageRoute()) },
         animatedAvatars = animatedAvatars,
         onAnimatedAvatarsChange = graph.liveAvatars::set,
     )
@@ -285,11 +291,11 @@ private fun SettingsIndex(graph: AppGraph, nav: NavHostController) {
         actions = remember(graph, nav, connect) {
             HappySettingsActions(
                 onBack = { nav.popBackStack() },
-                onAccount = { nav.navigate(AccountRoute) },
-                onBackup = { nav.navigate(BackupRoute) },
+                onAccount = { nav.navigate(AccountRoute()) },
+                onBackup = { nav.navigate(BackupRoute()) },
                 onAppearance = { nav.navigate(AppearanceRoute) },
-                onLanguage = { nav.navigate(LanguageRoute) },
-                onVoice = { nav.navigate(VoiceSettingsRoute) },
+                onLanguage = { nav.navigate(LanguageRoute()) },
+                onVoice = { nav.navigate(VoiceSettingsRoute()) },
                 onAgents = { nav.navigate(AgentsRoute) },
                 onScanTerminal = connect::scan,
                 onEnterTerminal = { enteringUrl = true },
@@ -298,8 +304,31 @@ private fun SettingsIndex(graph: AppGraph, nav: NavHostController) {
         },
         aboutActions = rememberAboutActions(graph, nav),
         connectingTerminal = connect.isLoading,
+        pages = rememberPageEntries(graph, nav, signedIn, profile),
     )
     if (enteringUrl) EnterTerminalUrlPrompt(connect, onDismiss = { enteringUrl = false })
+}
+
+/**
+ * The rows of a Happy account's own pages, for Settings' search (iOS's
+ *  for a Happy account: Account, Backup & Restore, Voice and
+ * Language; its Support us is the paywall here, not a page). Each opens
+ * its page at the row.
+ */
+@Composable
+private fun rememberPageEntries(graph: AppGraph, nav: NavHostController, account: AuthState.SignedIn, profile: Profile): List<SettingsEntry> {
+    val settings by graph.settings.settings.collectAsStateWithLifecycle()
+    val purchases by graph.purchases.purchases.collectAsStateWithLifecycle()
+    return accountPageEntries(
+        anonId = account.encryption.anonId,
+        publicId = account.publicId,
+        displayName = profile.displayName,
+        username = profile.github?.login,
+        server = serverHost(graph),
+    ) { nav.navigate(AccountRoute(reveal = it)) } +
+        backupPageEntries { nav.navigate(BackupRoute(reveal = it)) } +
+        voicePageEntries(settings, purchases.entitlements["pro"] == true) { nav.navigate(VoiceSettingsRoute(reveal = it)) } +
+        languagePageEntries(settings.preferredLanguage, Languages.detectedName(graph.language.deviceLocales())) { nav.navigate(LanguageRoute(reveal = it)) }
 }
 
 @Composable

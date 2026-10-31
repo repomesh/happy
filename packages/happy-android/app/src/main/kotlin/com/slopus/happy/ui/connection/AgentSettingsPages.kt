@@ -58,7 +58,6 @@ import com.slopus.happy.ui.components.Alert
 import com.slopus.happy.ui.components.AlertButton
 import com.slopus.happy.ui.components.Avatar
 import com.slopus.happy.ui.components.HappyAlert
-import com.slopus.happy.ui.components.HappySwitch
 import com.slopus.happy.ui.components.Icon
 import com.slopus.happy.ui.components.Ionicon
 import com.slopus.happy.ui.components.Item
@@ -66,6 +65,9 @@ import com.slopus.happy.ui.components.ItemGroup
 import com.slopus.happy.ui.components.ItemList
 import com.slopus.happy.ui.components.ItemSpec
 import com.slopus.happy.ui.components.Screen
+import com.slopus.happy.ui.settings.SettingsCard
+import com.slopus.happy.ui.settings.SettingsEntry
+import com.slopus.happy.ui.settings.SettingsSection
 import com.slopus.happy.ui.settings.SettingsTile
 import com.slopus.happy.ui.settings.SettingsTiles
 import com.slopus.happy.ui.theme.HappyTheme
@@ -107,6 +109,7 @@ object AgentPagesTags {
     const val BAR = "agentPages.bar"
     fun theme(theme: ThemePreference) = "agentPages.theme.${theme.name}"
     const val HIDE_PROJECTS = "agentPages.hideProjects"
+    const val HIDE_PROJECTS_ROW = "agentPages.hideProjectsRow"
     const val PICTURE = "agentPages.picture"
     const val CHANGE_PHOTO = "agentPages.changePhoto"
     const val NAME = "agentPages.name"
@@ -144,41 +147,50 @@ fun AgentAppearanceScreen(
     onProjectsHidden: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
-    val colors = HappyTheme.colors
+    val sections = agentAppearanceSections(theme, onTheme, projectsHidden, onProjectsHidden)
     AgentPage(stringResource(R.string.settings_appearance), onBack) {
-        ItemGroup {
-            for ((option, name) in listOf(
-                ThemePreference.Adaptive to R.string.settings_appearance_theme_options_adaptive,
-                ThemePreference.Light to R.string.settings_appearance_theme_options_light,
-                ThemePreference.Dark to R.string.settings_appearance_theme_options_dark,
-            )) {
-                Item(
-                    title = stringResource(name),
-                    rightElement = if (option == theme) ({ Icon(Ionicon.Checkmark, 22.dp, colors.textLink) }) else null,
-                    showChevron = false,
-                    onClick = { onTheme(option) },
-                    modifier = Modifier.testTag(AgentPagesTags.theme(option)),
-                )
-            }
-        }
-        ItemGroup(footer = stringResource(R.string.settings_hide_projects_footer)) {
-            val title = stringResource(R.string.settings_hide_projects)
-            Item(
-                title = title,
-                icon = { SettingsTile(Ionicon.FolderOutline, SettingsTiles.orange) },
-                rightElement = {
-                    HappySwitch(
-                        checked = projectsHidden,
-                        onCheckedChange = onProjectsHidden,
-                        modifier = Modifier.testTag(AgentPagesTags.HIDE_PROJECTS),
-                        label = title,
-                    )
-                },
-                showChevron = false,
-            )
-        }
+        for (section in sections) SettingsCard(section)
     }
 }
+
+/** Appearance's rows, which its page draws and Settings' search finds: see [AgentAppearanceScreen]. */
+@Composable
+fun agentAppearanceSections(
+    theme: ThemePreference,
+    onTheme: (ThemePreference) -> Unit,
+    projectsHidden: Boolean,
+    onProjectsHidden: (Boolean) -> Unit,
+): List<SettingsSection> = listOf(
+    SettingsSection(
+        listOf(
+            ThemePreference.Adaptive to R.string.settings_appearance_theme_options_adaptive,
+            ThemePreference.Light to R.string.settings_appearance_theme_options_light,
+            ThemePreference.Dark to R.string.settings_appearance_theme_options_dark,
+        ).map { (option, name) ->
+            SettingsEntry(
+                id = AgentPagesTags.theme(option),
+                title = stringResource(name),
+                checked = option == theme,
+                chevron = false,
+                onClick = { onTheme(option) },
+            )
+        },
+    ),
+    SettingsSection(
+        listOf(
+            SettingsEntry(
+                id = AgentPagesTags.HIDE_PROJECTS_ROW,
+                title = stringResource(R.string.settings_hide_projects),
+                icon = { SettingsTile(Ionicon.FolderOutline, SettingsTiles.orange) },
+                toggle = projectsHidden,
+                onToggle = onProjectsHidden,
+                toggleTag = AgentPagesTags.HIDE_PROJECTS,
+                chevron = false,
+            ),
+        ),
+        footer = stringResource(R.string.settings_hide_projects_footer),
+    ),
+)
 
 /** ProfileLayout.swift. */
 object AgentProfileSpec {

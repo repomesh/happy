@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -75,11 +76,12 @@ fun Screen(
  * A pushed screen's header: back arrow and title. Start-aligned, it is the
  * Material top app bar every agent screen has (home's, its settings'): the
  * arrow in the navigation slot on the 16 keyline, the title in Material's
- * title large, held to the content width. On a [Screen] it is glass.
+ * title large, [actions] at the end, held to the content width. On a
+ * [Screen] it is glass.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StackHeader(title: String, onBack: () -> Unit) {
+fun StackHeader(title: String, onBack: () -> Unit, actions: @Composable RowScope.() -> Unit = {}) {
     val colors = HappyTheme.colors
     Box(Modifier.fillMaxWidth().then(if (LocalBarOnGlass.current) Modifier else Modifier.background(colors.grouped.background))) {
         TopAppBar(
@@ -108,6 +110,7 @@ fun StackHeader(title: String, onBack: () -> Unit) {
                     modifier = Modifier.testTag(HeaderTags.TITLE).semantics { heading() },
                 )
             },
+            actions = actions,
         )
     }
 }

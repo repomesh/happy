@@ -298,16 +298,23 @@ fun AccountsCard(accounts: AccountMenu, actions: AccountsCardActions) {
                 }
             }
         }
-        Item(
-            title = stringResource(R.string.settings_add_agent),
-            titleColor = colors.textLink,
-            icon = { Icon(Ionicon.Add, 26.dp, colors.textLink) },
-            showChevron = false,
-            onClick = actions.onAdd,
-            modifier = Modifier.testTag(SettingsPageTags.ADD_AGENT),
-        )
+        SettingsRow(addAgentEntry(actions))
     }
     confirming?.let { entry -> RemoveConfirm(entry.agent, entry.name, onConfirm = { actions.onRemove?.invoke(entry) }, onDismiss = { confirming = null }) }
+}
+
+/** The accounts card's last row: "Add Agent" in the link colour, no chevron; Add's one flow. */
+@Composable
+fun addAgentEntry(actions: AccountsCardActions): SettingsEntry {
+    val colors = HappyTheme.colors
+    return SettingsEntry(
+        id = SettingsPageTags.ADD_AGENT,
+        title = stringResource(R.string.settings_add_agent),
+        titleColor = colors.textLink,
+        icon = { Icon(Ionicon.Add, 26.dp, colors.textLink) },
+        chevron = false,
+        onClick = actions.onAdd,
+    )
 }
 
 /**
@@ -363,17 +370,18 @@ class AboutActions(
 
 /** Support us (29 heart in a red tile; Pro gets the thanks and no action). */
 @Composable
+fun supportEntry(about: AboutInfo, actions: AboutActions) = SettingsEntry(
+    id = SettingsTags.SUPPORT,
+    title = stringResource(R.string.settings_support_us),
+    subtitle = stringResource(if (about.isPro) R.string.settings_support_us_subtitle_pro else R.string.settings_support_us_subtitle),
+    icon = { SettingsTile(Ionicon.HeartOutline, SettingsTiles.red) },
+    onClick = if (about.isPro) null else actions.onSupport,
+    chevron = false,
+)
+
+@Composable
 fun SupportCard(about: AboutInfo, actions: AboutActions) {
-    ItemGroup {
-        Item(
-            title = stringResource(R.string.settings_support_us),
-            subtitle = stringResource(if (about.isPro) R.string.settings_support_us_subtitle_pro else R.string.settings_support_us_subtitle),
-            icon = { SettingsTile(Ionicon.HeartOutline, SettingsTiles.red) },
-            onClick = if (about.isPro) null else actions.onSupport,
-            showChevron = false,
-            modifier = Modifier.testTag(SettingsTags.SUPPORT),
-        )
-    }
+    SettingsCard(SettingsSection(listOf(supportEntry(about, actions))))
 }
 
 /**
@@ -384,47 +392,58 @@ fun SupportCard(about: AboutInfo, actions: AboutActions) {
  * offer the link menu on a long press, as links in text do.
  */
 @Composable
-fun AboutCard(about: AboutInfo, actions: AboutActions) {
-    ItemGroup(footer = stringResource(R.string.settings_about_footer)) {
-        Item(
+fun aboutSection(about: AboutInfo, actions: AboutActions) = SettingsSection(
+    listOf(
+        SettingsEntry(
+            id = SettingsTags.WHATS_NEW,
             title = stringResource(R.string.settings_whats_new),
             icon = { SettingsTile(Ionicon.SparklesOutline, SettingsTiles.orange) },
             onClick = actions.onWhatsNew,
-        )
-        Item(
+        ),
+        SettingsEntry(
+            id = SettingsTags.GITHUB,
             title = stringResource(R.string.settings_github),
             icon = { SettingsTile(Ionicon.LogoGithub, SettingsTiles.gray) },
             detail = "slopus/happy",
             onClick = { actions.onOpenUrl(SettingsSpec.GITHUB_URL) },
             onLongClick = rememberLinkMenu(SettingsSpec.GITHUB_URL),
-        )
-        Item(
+        ),
+        SettingsEntry(
+            id = SettingsTags.REPORT_ISSUE,
             title = stringResource(R.string.settings_report_issue),
             icon = { SettingsTile(Ionicon.BugOutline, SettingsTiles.red) },
             onClick = { actions.onOpenUrl(SettingsSpec.ISSUES_URL) },
             onLongClick = rememberLinkMenu(SettingsSpec.ISSUES_URL),
-        )
-        Item(
+        ),
+        SettingsEntry(
+            id = SettingsTags.PRIVACY,
             title = stringResource(R.string.settings_privacy_policy),
             icon = { SettingsTile(Ionicon.ShieldCheckmarkOutline, SettingsTiles.blue) },
             onClick = { actions.onOpenUrl(SettingsSpec.PRIVACY_URL) },
             onLongClick = rememberLinkMenu(SettingsSpec.PRIVACY_URL),
-        )
-        Item(
+        ),
+        SettingsEntry(
+            id = SettingsTags.TERMS,
             title = stringResource(R.string.settings_terms_of_service),
             icon = { SettingsTile(Ionicon.DocumentTextOutline, SettingsTiles.gray) },
             onClick = { actions.onOpenUrl(SettingsSpec.TERMS_URL) },
             onLongClick = rememberLinkMenu(SettingsSpec.TERMS_URL),
-        )
-        Item(
+        ),
+        SettingsEntry(
+            id = SettingsTags.VERSION,
             title = stringResource(R.string.common_version),
             subtitle = about.versionSubtitle,
             subtitleLines = 2,
             detail = about.versionName,
             icon = { SettingsTile(Ionicon.InformationCircleOutline, SettingsTiles.gray) },
-            showChevron = false,
+            chevron = false,
             onClick = actions.onVersion,
-            modifier = Modifier.testTag(SettingsTags.VERSION),
-        )
-    }
+        ),
+    ),
+    footer = stringResource(R.string.settings_about_footer),
+)
+
+@Composable
+fun AboutCard(about: AboutInfo, actions: AboutActions) {
+    SettingsCard(aboutSection(about, actions))
 }

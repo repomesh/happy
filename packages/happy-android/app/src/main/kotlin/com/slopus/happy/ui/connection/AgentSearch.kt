@@ -159,7 +159,7 @@ object AgentSearchSpec {
 
 /** The search field that takes the header's title while searching; focused when it appears. */
 @Composable
-fun AgentSearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
+fun AgentSearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier, placeholder: String = stringResource(R.string.agent_search_placeholder)) {
     val colors = HappyTheme.colors
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -176,7 +176,7 @@ fun AgentSearchField(query: String, onQueryChange: (String) -> Unit, modifier: M
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterStart) {
                 if (query.isEmpty()) {
-                    Text(stringResource(R.string.agent_search_placeholder), style = style.copy(color = colors.input.placeholder), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(placeholder, style = style.copy(color = colors.input.placeholder), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 inner()
             }

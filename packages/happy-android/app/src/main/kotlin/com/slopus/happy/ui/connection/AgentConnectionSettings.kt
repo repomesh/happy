@@ -35,8 +35,6 @@ import com.slopus.happy.agent.AgentLinkStatus
 import com.slopus.happy.agent.AgentProfileState
 import com.slopus.happy.ui.components.Avatar
 import com.slopus.happy.ui.components.Ionicon
-import com.slopus.happy.ui.components.Item
-import com.slopus.happy.ui.components.ItemGroup
 import com.slopus.happy.ui.components.ItemList
 import com.slopus.happy.ui.components.Screen
 import com.slopus.happy.ui.connect.LocalAddFlow
@@ -44,7 +42,6 @@ import com.slopus.happy.ui.conversation.openChiefOfStaff
 import com.slopus.happy.ui.home.AccountMenu
 import com.slopus.happy.ui.home.rememberAccountMenu
 import com.slopus.happy.ui.settings.AboutActions
-import com.slopus.happy.ui.settings.AboutCard
 import com.slopus.happy.ui.settings.AboutInfo
 import com.slopus.happy.ui.settings.AccountsCard
 import com.slopus.happy.ui.settings.AccountsCardActions
@@ -54,9 +51,20 @@ import com.slopus.happy.ui.settings.SettingsHeader
 import com.slopus.happy.ui.settings.SettingsPageSpec
 import com.slopus.happy.ui.settings.SettingsPageTags
 import com.slopus.happy.ui.settings.SettingsProfile
+import com.slopus.happy.ui.settings.SettingsCard
+import com.slopus.happy.ui.settings.SettingsEntry
+import com.slopus.happy.ui.settings.SettingsSearchBar
+import com.slopus.happy.ui.settings.SettingsSearchButton
+import com.slopus.happy.ui.settings.SettingsSearchResults
+import com.slopus.happy.ui.settings.SettingsSection
 import com.slopus.happy.ui.settings.SettingsTile
+import com.slopus.happy.ui.settings.aboutSection
+import com.slopus.happy.ui.settings.addAgentEntry
+import com.slopus.happy.ui.settings.rememberSettingsSearch
+import com.slopus.happy.ui.settings.settingsProfileEntries
+import com.slopus.happy.ui.settings.settingsSearchResults
+import com.slopus.happy.ui.settings.supportEntry
 import com.slopus.happy.ui.settings.SettingsTiles
-import com.slopus.happy.ui.settings.SupportCard
 import com.slopus.happy.ui.settings.rememberAboutActions
 import com.slopus.happy.ui.settings.rememberAboutInfo
 import com.slopus.happy.ui.theme.HappyTheme
@@ -109,6 +117,10 @@ data class AgentPerson(val name: String = "", val photo: ImageBitmap? = null)
  * Support us; About; Disconnect, after a confirm. A device token can't reach
  * the agent's device list (API.md, "Credentials on the connector's
  * socket"), so disconnecting forgets the agent on this phone only.
+ *
+ * Search, as on a Happy account's page ([SettingsSearchResults]), finds the
+ * accounts by name, the picture's two asks (which run), this page's rows
+ * and [appearance]'s, which change in place.
  */
 @Composable
 fun AgentConnectionSettingsScreen(
@@ -119,51 +131,82 @@ fun AgentConnectionSettingsScreen(
     accountActions: AccountsCardActions = AccountsCardActions({}, {}),
     aboutActions: AboutActions = AboutActions(),
     person: AgentPerson = AgentPerson(),
+    /** Appearance's rows, for search: found, they change here, as on their page. */
+    appearance: List<SettingsEntry> = emptyList(),
 ) {
-    val colors = HappyTheme.colors
     val namePrefix = stringResource(R.string.agent_settings_edit_name_prefix)
     val avatarPrefix = stringResource(R.string.agent_settings_edit_avatar_prefix)
+    val changeAvatar = stringResource(R.string.settings_change_avatar)
+    val editName = stringResource(R.string.settings_edit_name)
     val edit = listOf(
-        SettingsEditItem(stringResource(R.string.settings_change_avatar), Ionicon.ImageOutline, SettingsPageTags.EDIT_AVATAR) { actions.onAskChief(avatarPrefix) },
-        SettingsEditItem(stringResource(R.string.settings_edit_name), Ionicon.Pencil, SettingsPageTags.EDIT_NAME) { actions.onAskChief(namePrefix) },
+        SettingsEditItem(changeAvatar, Ionicon.ImageOutline, SettingsPageTags.EDIT_AVATAR) { actions.onAskChief(avatarPrefix) },
+        SettingsEditItem(editName, Ionicon.Pencil, SettingsPageTags.EDIT_NAME) { actions.onAskChief(namePrefix) },
     )
-    // The bar on the page's own grey (black in dark), the groups on it: one surface, as the chat's details.
-    Screen(
-        header = {
-            AgentTopBar(
-                tag = AgentSettingsTags.BAR,
-                container = colors.grouped.background,
-                navigationIcon = { BarIconButton(Ionicon.ArrowBack, stringResource(R.string.common_back), actions.onBack) },
-                title = { Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleLarge, maxLines = 1) },
-            )
-        },
-    ) {
-        ItemList {
-            SettingsHeader(profile, edit)
-            AccountsCard(accounts, accountActions)
-            ItemGroup {
-                Item(
+    val search = rememberSettingsSearch()
+    val sections = listOf(
+        SettingsSection(
+            listOf(
+                SettingsEntry(
+                    id = AgentSettingsTags.PROFILE,
                     title = stringResource(R.string.settings_account_profile),
                     icon = { PersonPicture(person.photo, profile.id, SettingsPageSpec.tile) },
                     detail = person.name.takeIf { it.isNotEmpty() },
                     onClick = actions.onProfile,
-                    modifier = Modifier.testTag(AgentSettingsTags.PROFILE),
-                )
-            }
-            ItemGroup {
-                Item(
+                ),
+            ),
+        ),
+        SettingsSection(
+            listOf(
+                SettingsEntry(
+                    id = AgentSettingsTags.APPEARANCE,
                     title = stringResource(R.string.settings_appearance),
                     icon = { SettingsTile(Ionicon.ColorPaletteOutline, SettingsTiles.purple) },
                     onClick = actions.onAppearance,
-                    modifier = Modifier.testTag(AgentSettingsTags.APPEARANCE),
+                ),
+            ),
+        ),
+        SettingsSection(listOf(supportEntry(about, aboutActions))),
+        aboutSection(about, aboutActions),
+    )
+    // The bar on the page's own grey (black in dark), the groups on it: one surface, as the chat's details.
+    Screen(
+        header = {
+            if (search.searching) {
+                SettingsSearchBar(search, AgentSettingsTags.BAR)
+            } else {
+                AgentTopBar(
+                    tag = AgentSettingsTags.BAR,
+                    container = HappyTheme.colors.grouped.background,
+                    navigationIcon = { BarIconButton(Ionicon.ArrowBack, stringResource(R.string.common_back), actions.onBack) },
+                    title = { Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleLarge, maxLines = 1) },
+                    actions = { SettingsSearchButton(search) },
                 )
             }
-            SupportCard(about, aboutActions)
-            AboutCard(about, aboutActions)
-            RemoveCard(agent = true, name = profile.name, onRemove = actions.onRemove)
+        },
+        avoidKeyboard = search.searching,
+    ) {
+        if (search.searching) {
+            // The picture's two asks, found here, run: the Chief of Staff's chat opens with the words typed in.
+            val asks = listOf(
+                SettingsEntry(ASK_NAME, editName, icon = { SettingsTile(Ionicon.CreateOutline, SettingsTiles.blue) }, chevron = false, onClick = { actions.onAskChief(namePrefix) }, closesSearch = true),
+                SettingsEntry(ASK_AVATAR, changeAvatar, icon = { SettingsTile(Ionicon.ImageOutline, SettingsTiles.orange) }, chevron = false, onClick = { actions.onAskChief(avatarPrefix) }, closesSearch = true),
+            )
+            val profiles = settingsProfileEntries(accounts, accountActions.onSwitch)
+            val rows = listOf(addAgentEntry(accountActions)) + sections.flatMap { it.rows } + appearance
+            SettingsSearchResults(search, settingsSearchResults(search.query, profiles, asks, rows))
+        } else {
+            ItemList {
+                SettingsHeader(profile, edit)
+                AccountsCard(accounts, accountActions)
+                for (section in sections) SettingsCard(section)
+                RemoveCard(agent = true, name = profile.name, onRemove = actions.onRemove)
+            }
         }
     }
 }
+
+private const val ASK_NAME = "agentSettings.ask.name"
+private const val ASK_AVATAR = "agentSettings.ask.avatar"
 
 /** The person's picture round at [size], else the one [seed] picks (as their Profile page shows it). */
 @Composable
@@ -239,6 +282,8 @@ private fun AgentConnectionSettings(graph: AppGraph, nav: NavHostController, con
     val status = session?.status?.collectAsStateWithLifecycle()?.value ?: AgentLinkStatus.Offline
     val personState = session?.profile?.state?.collectAsStateWithLifecycle()?.value ?: AgentProfileState()
     val personPhoto = rememberPhoto(session?.profile?.photo?.collectAsStateWithLifecycle()?.value)
+    val theme by graph.localSettings.themePreference.collectAsStateWithLifecycle()
+    val projectsHidden = session?.projectsHidden?.collectAsStateWithLifecycle()?.value ?: false
     // Read every time the page shows, as iOS's Profile row is.
     LaunchedEffect(session) { session?.profile?.refresh() }
     val scope = rememberCoroutineScope()
@@ -267,5 +312,6 @@ private fun AgentConnectionSettings(graph: AppGraph, nav: NavHostController, con
         accountActions = rememberAccountsCardActions(graph),
         aboutActions = rememberAboutActions(graph, nav),
         person = AgentPerson(personState.name, personPhoto),
+        appearance = agentAppearanceSections(theme, graph.localSettings::setThemePreference, projectsHidden, { session?.setProjectsHidden(it) }).flatMap { it.rows },
     )
 }
