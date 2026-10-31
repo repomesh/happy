@@ -64,7 +64,10 @@ round-rects: a top half and a bottom half.
 
 - In a chat, `ChatActivityFadeView` draws the blurred source under the top and bottom
   zones, masked `DST_IN` with a 48 dp gradient of alpha `0, 0x60, 0xB0, 0xE8` of 285
-  (0, 0.34, 0.62, 0.81). The mask holds at 0.81 past the ramp.
+  (0, 0.34, 0.62, 0.81). The mask holds at 0.81 past the ramp. The bottom zone is the
+  input zone itself (`setFadeZoneBottom(inputHeight)`, `checkUi_BlurHeight`), and the list's
+  bottom padding ends at its top, so the ramp lies inside the dock and never over a resting
+  message.
 - On the chat list, `DialogsActivityTopBubblesFadeView` is a plain colour gradient
   (`E8, C0, 90, 00` of the background) at most 40 dp tall, under the filter tabs.
 
@@ -124,6 +127,64 @@ Checked on the Galaxy Z Fold7 inner display (1968×2184, 420 dpi), light and dar
 home, an agent chat, legacy home and its chat, and settings. Screenshots in
 `.context/shots/device/` (not committed): `before-agentchat-dark.png` shows sharp text
 under the title; `after-*` show it frosted.
+
+## Why the blur shimmered while scrolling (fixed 2026-10-31)
+
+Steve, on the Fold: "The blur works but it's shaky… white text on black coming into the
+frame is very unstable."
+
+**How it was measured.** `adb shell input motionevent` held a finger on the agent chat and
+moved it 1 px at a time, 40 steps, with a `screencap` of the inner display after each one
+(dark mode, an idle chat of white text). The content under the bar moved exactly 1 px per
+step. For each band of the bar, D is the mean |frame − previous frame| in 8-bit luma.
+Under a stable blur, D is small and about the same every step. An unstable one sits still
+and then jumps, so its D alternates between 0 and a spike. Scripts are in `.context/blur/`
+(`step.sh`, `jitter.py`, not committed).
+
+**Cause: the copy was drawn small, not shrunk.** `recordBlurOf` drew the content layer
+straight into the 1/8 layer under `scale(1/8)`, as Telegram's `beginRecordingRect` does
+(`c.scale(1f / k, 1f / k)`). hwui rasterises the text again at that scale, so each glyph
+lands on the small copy's 8 px grid. Scroll 1 px and nothing changes; scroll a few more and
+a glyph's whole column of small pixels flips. After the 40 dp blur, that is a soft blob
+that sits still for several frames and then jumps. Bright thin glyphs on black are the worst
+case. The same run with the copy at 1/4, 1/2 and 1/1 put the steps at the small copy's
+pixel size and not elsewhere. Decal versus clamp tiling and the 48 dp capture margin made no
+difference (both measured). Saturation ×3 doesn't touch grey text.
+
+**Why Telegram gets away with it.** Its capture is the same, and so are its offsets: the
+scroll-modulo correction in `DownscaledRenderNode.onScrolled` runs only with
+`allowNoiseSuppress`, which nothing turns on. Its chats are bubbles on a wallpaper,
+though. Under the input and header the 1/8 copy sees large antialiased rounded rects whose
+edges move smoothly at any scale, and the text inside is a small part of the picture. Our
+transcript is bare text on the page colour, so the text is all the glass sees.
+
+**Fix.** The glass now draws the content at full size into a layer of its own, softened by
+a blur of about half a small pixel (`GlassSpec.prefilterRadius(8)`: sigma 4 px), and
+shrinks that (`GlassLayers.record`). Text is rasterised at full size, the prefilter takes
+out what the 1/8 grid can't hold, and the result moves with the content pixel by pixel. The
+capture rect is rounded to whole pixels so the full-size layer lies on the screen's grid.
+The 40 dp blur, ×3 saturation, tints and alphas are all unchanged, so the bar looks the same
+at rest. The cost is one more layer, the size of the bar plus its 48 dp margin, with a small
+blur, per glass.
+
+| per 1 px step, dark | before: D mean / max / CV | after: D mean / max / CV |
+|---|---|---|
+| bar, status-bar band (y 0–90) | 0.21 / 2.68 / 2.27; 24% of pixels jump by > 4 at once | 0.12 / 0.51 / 0.80; none |
+| bar, title band (90–180) | 0.23 / 1.21 / 1.47 | 0.07 / 0.14 / 0.41 |
+| bar, bottom band (180–255) | 0.17 / 1.00 / 1.45 | 0.05 / 0.09 / 0.35 |
+
+The worst single frame is 8–11× smaller in every band, and the coefficient of variation
+fell from around 1.5 (still, then jump) to around 0.4 (an even drift).
+
+## The dock's "shadow" (fixed 2026-10-31)
+
+Steve: "the bottom part of the content is under a shadow and I can't scroll it up." The
+agent chat's fade box was the dock plus 48 dp, so it ramped to 0.81 tint and blur over the
+48 dp above the composer. The list keeps only the dock plus 8 dp clear, so the newest
+message always rested under the ramp. Telegram's fade zone is the input zone itself (see
+"Fades"). The fade box is now the dock's own height and starts at its top
+(`ConversationScreen`). `ConversationComposerGlassTest` checks that the newest row ends
+above the fade at rest, with the card open, and with a 20-line draft.
 
 ## Ours before this change (`ui/components/Glass.kt`)
 
