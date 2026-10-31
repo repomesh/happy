@@ -323,6 +323,7 @@ fun ChatScreen(
                                 groupToolCalls = groupToolCalls,
                                 currentTurnComplete = isCurrentTurnComplete(state.thinking, session.agentState),
                                 foreground = foreground,
+                                working = state.sessionState == SessionState.Thinking,
                             )
                         }
                         state.snapshot.loaded -> EmptyMessages(

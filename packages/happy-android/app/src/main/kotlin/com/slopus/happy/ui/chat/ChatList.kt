@@ -46,6 +46,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.slopus.happy.R
@@ -60,6 +61,9 @@ import com.slopus.happy.ui.components.Octicon
 import com.slopus.happy.ui.components.RoundButton
 import com.slopus.happy.ui.components.RoundButtonDisplay
 import com.slopus.happy.ui.components.RoundButtonSize
+import com.slopus.happy.ui.components.ShimmerSpec
+import com.slopus.happy.ui.components.rememberReduceMotion
+import com.slopus.happy.ui.components.shimmer
 import com.slopus.happy.ui.layout.LocalWindowLayout
 import com.slopus.happy.ui.theme.HappyTheme
 import com.slopus.happy.ui.theme.happyTextStyle
@@ -75,6 +79,7 @@ object ChatListTags {
     const val FOOTER = "chat.list.footer"
     const val CONTROLLED_WARNING = "chat.list.controlledWarning"
     const val SCROLL_BUTTON = "chat.list.scrollToBottom"
+    const val SCROLL_ARROW = "chat.list.scrollToBottom.arrow"
 }
 
 /** ChatList.tsx / ChatFooter.tsx. */
@@ -179,7 +184,8 @@ fun olderStatus(blocked: OlderBlock?, hasMoreOlder: Boolean, isLoadingOlder: Boo
  * once five pages in a row brought nothing visible (small inverted
  * RoundButtons), with a spacer beyond it ([olderInset]). History is fetched whenever the oldest row is within a
  * viewport of the screen. Past 300 from the newest row a 32 round button
- * (surface at 0.9, 1 divider border, Octicons arrow-down 14), centred,
+ * (surface at 0.9, 1 divider border, Octicons arrow-down 14, the arrow
+ * shimmering while [working], as iOS's jump does), centred,
  * scrolls back down: 16 above the composer card when the dock floats over
  * the list ([scrollButtonInset], the card's distance from the list's
  * bottom), else 4 above the list's end. [bottomInset] (the floating dock)
@@ -215,6 +221,8 @@ fun ChatList(
     groupToolCalls: Boolean = false,
     currentTurnComplete: Boolean = true,
     foreground: Boolean = true,
+    /** The agent is working: the scroll button's arrow shimmers, as iOS's jump does. */
+    working: Boolean = false,
 ) {
     val colors = HappyTheme.colors
     val scope = rememberCoroutineScope()
@@ -300,6 +308,9 @@ fun ChatList(
         }
         if (showScrollButton) {
             val scrollLabel = stringResource(R.string.chat_scroll_to_bottom)
+            val workingState = stringResource(R.string.conversation_jump_working)
+            // Hidden, it isn't composed, so it doesn't sweep.
+            val sweeps = working && !rememberReduceMotion()
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -311,10 +322,20 @@ fun ChatList(
                     .background(colors.surface)
                     .border(1.dp, colors.divider, CircleShape)
                     .clickable(role = Role.Button) { scope.launch { state.animateScrollToItem(0) } }
-                    .semantics { contentDescription = scrollLabel },
+                    .semantics {
+                        contentDescription = scrollLabel
+                        if (working) stateDescription = workingState
+                    },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Octicon.ArrowDown, ChatListSpec.scrollIcon, colors.text)
+                Icon(
+                    Octicon.ArrowDown,
+                    ChatListSpec.scrollIcon,
+                    colors.text,
+                    modifier = Modifier
+                        .testTag(ChatListTags.SCROLL_ARROW)
+                        .then(if (sweeps) Modifier.shimmer(ShimmerSpec.sheen(colors.text, colors.surface)) else Modifier),
+                )
             }
         }
     }

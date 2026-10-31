@@ -148,7 +148,8 @@ class ConversationScreenActions(
  * subagent or archived chat has a line saying so instead. Past the oldest
  * row a 32 slot: a spinner while a page loads; after a failed page
  * "Couldn't load earlier messages." and a Retry text button, and nothing
- * asks again until Retry. Before history is read a spinner sits centred; a
+ * asks again until Retry. Away from the newest message, [ConversationJump]
+ * leads back, its arrow shimmering while the agent works. Before history is read a spinner sits centred; a
  * new chat, an empty one and one that could not be read say so in
  * bodyLarge, 32 in.
  */
@@ -330,6 +331,7 @@ fun ConversationScreen(
                     .glassFade(glass, colors.surface, blurs)
                     .testTag(ConversationScreenTags.FADE),
             )
+            if (phase == TranscriptPhase.Rows) ConversationJump(listState, state.activity, dockHeight)
             Column(
                 Modifier
                     .align(Alignment.BottomCenter)

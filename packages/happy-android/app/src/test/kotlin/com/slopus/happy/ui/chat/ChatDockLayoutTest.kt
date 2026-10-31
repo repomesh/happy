@@ -8,6 +8,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.captureToImage
@@ -62,10 +67,10 @@ class ChatDockLayoutTest {
 
     private val hint = InactiveHint(canResume = false, resuming = false, resumeCommand = ResumeCommandBlock(listOf("happy claude --resume abc"), "happy claude --resume abc"))
 
-    private fun show(rowCount: Int = 1, withHint: Boolean = true) = rule.setHappyContent {
+    private fun show(rowCount: Int = 1, withHint: Boolean = true, thinking: () -> Boolean = { false }) = rule.setHappyContent {
         ProvideWindowLayout {
             ChatScreen(
-                state = ChatState(ChatSnapshot(rows(rowCount), loaded = true), info, sessionLoaded = true, online = true),
+                state = ChatState(ChatSnapshot(rows(rowCount), loaded = true), info, sessionLoaded = true, online = true, thinking = thinking()),
                 draft = "",
                 bubbleColor = "gray",
                 actions = ChatScreenActions(),
@@ -126,6 +131,23 @@ class ChatDockLayoutTest {
         val card = rule.node(ComposerTags.PANEL).bounds
         val button = rule.node(ChatListTags.SCROLL_BUTTON).bounds
         assertDp("scroll button 16 above the card", card.top - 16.dp, button.bottom)
+    }
+
+    @Test
+    @Config(qualifiers = PHONE)
+    fun theScrollButtonsArrowShimmersWhileTheAgentThinks() {
+        var thinking by mutableStateOf(false)
+        show(rowCount = 60, thinking = { thinking })
+        rule.node(ChatListTags.LIST).performTouchInput { swipeDown(startY = top + 200f, endY = bottom - 200f) }
+        rule.waitForIdle()
+        val described = SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription)
+        rule.node(ChatListTags.SCROLL_BUTTON).assert(!described)
+        thinking = true
+        rule.waitForIdle()
+        rule.node(ChatListTags.SCROLL_BUTTON).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "working"))
+        thinking = false
+        rule.waitForIdle()
+        rule.node(ChatListTags.SCROLL_BUTTON).assert(!described)
     }
 
     @Test
