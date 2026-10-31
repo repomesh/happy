@@ -31,7 +31,6 @@ import com.slopus.happy.ui.PHONE
 import com.slopus.happy.ui.PHONE_WIDTH
 import com.slopus.happy.ui.assertDp
 import com.slopus.happy.ui.bounds
-import com.slopus.happy.ui.components.GlassSpec
 import com.slopus.happy.ui.node
 import com.slopus.happy.ui.setHappyContent
 import org.junit.Assert.assertEquals
@@ -102,7 +101,7 @@ class ConversationJumpTest {
         assertDp("32 high", 32.dp, jump.height)
         // 411 has no whole-pixel centre for 32: within a pixel of it.
         assertEquals("centred", PHONE_WIDTH / 2f, ((jump.left + jump.right) / 2).value, 1 / 3f)
-        val dockTop = rule.node(ConversationScreenTags.FADE).bounds.top + GlassSpec.fade
+        val dockTop = rule.node(ConversationScreenTags.FADE).bounds.top
         assertDp("12 above the list's end, 8 over the dock", dockTop - 20.dp, jump.bottom)
         rule.node(ConversationJumpTags.JUMP).assert(hasContentDescription("Jump to latest")).assert(still)
         val dir = File("build/conversation-screens").apply { mkdirs() }

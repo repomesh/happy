@@ -84,7 +84,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import com.slopus.happy.ui.components.GlassSource
-import com.slopus.happy.ui.components.GlassSpec
 import com.slopus.happy.ui.components.glassFade
 import com.slopus.happy.ui.components.glassSource
 import com.slopus.happy.ui.components.rememberGlassBlur
@@ -356,12 +355,14 @@ fun ConversationScreen(
                     NewWorkChoicePanel(shown, onChange = actions.onChoiceChange, onReturn = { nameReturns++ })
                 }
             }
-            // What scrolls under the dock goes soft and pale over its top 32, Telegram's way, full width.
+            // What scrolls under the dock goes soft and pale over the dock's top 48, full width. The fade
+            // starts at the dock's top, as Telegram's lies inside its input zone (ChatActivityFadeView),
+            // so the newest message, which rests above the dock, is never under it.
             Box(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(dockHeight + GlassSpec.fade)
+                    .height(dockHeight)
                     .glassFade(glass, colors.surface, blurs)
                     .testTag(ConversationScreenTags.FADE),
             )

@@ -86,7 +86,11 @@ object GlassSpec {
     /** A bar's ground over the blur, light and dark: Telegram's chat list bar. */
     const val BAR_ALPHA = 216f / 255f
     const val BAR_ALPHA_DARK = 178f / 255f
-    /** How far above what it backs the fade starts. */
+    /**
+     * How far down from the top of what it backs the fade ramps in. It starts
+     * at that top, not above it, so content resting above a dock is never
+     * under it (Telegram's lies inside its input zone).
+     */
     val fade = 48.dp
     /**
      * How much content round a glass goes into its blur (Telegram records 48

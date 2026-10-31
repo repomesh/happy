@@ -104,6 +104,25 @@ class ConversationComposerGlassTest {
         assertTrue("newest row ends above the pill", line.bottom <= pill.top)
     }
 
+    @Test fun `at the newest end no message rests under the dock's fade, however tall the dock grows`() {
+        show(ConversationState(created = true, loaded = true, rows = rows, agent = agent, mode = mode, catalog = catalog))
+        fun assertClear(case: String) {
+            rule.waitForIdle()
+            val fade = rule.node(ConversationScreenTags.FADE).bounds
+            val pill = rule.node(ConversationComposerTags.PILL).bounds
+            val line = rule.onNodeWithText("Line 1 of a long answer").bounds
+            // The fade starts at the dock's top, inside it (Telegram's input zone), not above it...
+            assertTrue("$case: fade top ${fade.top} within the dock, above the pill ${pill.top}", fade.top <= pill.top && fade.top >= pill.top - 16.dp)
+            // ...so the newest row, scrolled fully down, ends above all of it.
+            assertTrue("$case: newest row ${line.bottom} ends above the fade ${fade.top}", line.bottom <= fade.top)
+        }
+        assertClear("at rest")
+        rule.node(ConversationComposerTags.INPUT).performSemanticsAction(SemanticsActions.RequestFocus)
+        assertClear("open")
+        rule.node(ConversationComposerTags.INPUT).performTextInput((1..20).joinToString("\n") { "line $it" })
+        assertClear("a long draft")
+    }
+
     @Test fun `TalkBack reads model and effort as one button`() {
         show(ConversationState(created = true, loaded = true, rows = rows, agent = agent, mode = mode, catalog = catalog))
         rule.node(ConversationComposerTags.INPUT).performSemanticsAction(SemanticsActions.RequestFocus)
