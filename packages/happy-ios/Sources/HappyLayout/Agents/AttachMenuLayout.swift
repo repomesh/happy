@@ -7,13 +7,14 @@ import CoreGraphics
 /// (`AttachmentContainer`, `AttachmentController`, `AttachmentPanel`,
 /// `MediaPickerScreen`, `MediaPickerPlaceholderNode`):
 ///
-///     ╭──────── ▬ ────────╮   a sheet over the dimmed chat, a quarter of
-///     │      Recents   (×)│   the screen down; dragged up it fills the
+///     ╭───────────────────╮   a sheet over the dimmed chat, a quarter of
+///     │(×)(✓3) Recents ⌄  │   the screen down; dragged up it fills the
 ///     │ ┌──┐ ▢ ▢           │   screen, dragged down it goes
 ///     │ │📷│ ▢ ▢           │   the camera two rows tall at the top left,
 ///     │ └──┘ ▢ ▢ ▢ ...     │   the library newest first around it
 ///     │    ( Gallery|Files )│   a glass tab bar 22 off the bottom, which
-///     ╰───────────────────╯   turns into "Add N" while photos are picked
+///     ╰───────────────────╯   turns into the caption and send while
+///                              photos are picked
 ///
 /// On an iPad the menu is a 390 × 670 card over the "+" instead. Without
 /// the library the gallery is an explanation with the system's picker
@@ -29,10 +30,6 @@ public enum AttachMenuMetrics {
     /// At rest the sheet is drawn 5 in from each side, scaled about its
     /// middle; expanded it fills the width.
     public static let restInset: CGFloat = 5
-    public static let grabber = CGSize(width: 36, height: 5)
-    public static let grabberTop: CGFloat = 5
-    /// The camera cell's glyph, centred in the cell.
-    public static let cameraIcon: CGFloat = 30
 
     /// The iPad card, over the "+" (`containerLayoutUpdated`, regular width).
     public static let cardSize = CGSize(width: 390, height: 670)
@@ -40,9 +37,19 @@ public enum AttachMenuMetrics {
     public static let cardBottom: CGFloat = 54
     public static let cardMargin: CGFloat = 16
 
-    /// The header: the close circle (`SheetCloseLayout`) and the title on its middle.
-    public static let headerBottom: CGFloat = 8
-    public static let titleGap: CGFloat = 8
+    /// The header (`MediaPickerScreen`, glass): the grid runs under a 68
+    /// tall glass bar (`defaultNavigationBarHeight` in a glass modal) with
+    /// the close button 16 in from the corner, 44 round; the picked count
+    /// 12 right of it; the title on their middle.
+    public static let headerHeight: CGFloat = 68
+    public static let headerInset: CGFloat = 16
+    public static let headerButton: CGFloat = 44
+    public static let headerGap: CGFloat = 12
+    /// The fade under the header over a scrolled grid: 80 tall, from 5
+    /// scrolled; the title turns white from 30.
+    public static let topEdge: CGFloat = 80
+    public static let topEdgeFrom: CGFloat = 5
+    public static let darkTitleFrom: CGFloat = 30
 
     /// The grid: three columns (five on a phone turned sideways), 1 apart.
     public static let spacing: CGFloat = 1
@@ -64,9 +71,24 @@ public enum AttachMenuMetrics {
         default: 300
         }
     }
-    /// While photos are picked the bar is one button, 28 in from the sides.
-    public static let addHeight: CGFloat = 52
-    public static let addSide: CGFloat = 28
+    /// A tab: its 30 glyph 9 down (4 + a pixel, 5 more on glass), its
+    /// name's top 15 and two pixels under the glyph's middle.
+    public static let tabIconTop: CGFloat = 9
+    public static let tabTitleGap: CGFloat = 15
+    /// While photos are picked the bar is the caption: 28 in from the sides
+    /// and the bottom (16 and 8 over the keyboard), 40 tall at least, its
+    /// corners 20 at most; the tabs rise 11 as they fade.
+    public static let captionSide: CGFloat = 28
+    public static let captionFocusedSide: CGFloat = 16
+    public static let captionBottom: CGFloat = 28
+    public static let captionFocusedBottom: CGFloat = 8
+    public static let captionHeight: CGFloat = 40
+    public static let captionRadius: CGFloat = 20
+    public static let captionTextInset: CGFloat = 16
+    public static let tabsRise: CGFloat = 11
+    /// Send, in the caption's last 51: a 40 × 34 accent capsule.
+    public static let sendWidth: CGFloat = 51
+    public static let sendBackground = CGSize(width: 40, height: 34)
     /// Room the page keeps under its content for the bar.
     public static var barReserve: CGFloat { barBottom + barHeight + 8 }
 }
@@ -92,12 +114,44 @@ public enum AttachMenuMotion {
     public static let springStiffness: CGFloat = 900
     public static let springDamping: CGFloat = 124
     public static let returnDuration: TimeInterval = 0.3
-    /// A drag that goes: 60 past rest (180 from expanded when the sheet
-    /// can't rest lower), or any drop flicked down at 300 pt/s; expanded at
-    /// the top, a flick of 1800.
-    public static let dismissDistance: CGFloat = 60
-    public static let flick: CGFloat = 300
-    public static let hardFlick: CGFloat = 1800
+    /// The drop a drag leaves goes back over 0.3 s, ease in-out, beside
+    /// the top's own settle.
+    public static let dropReturnDuration: TimeInterval = 0.3
+    /// A drag that sends the sheet away: damping 180, its velocity over
+    /// the screen below the sheet's top (`interactivelyDismissed`).
+    public static let dismissDamping: CGFloat = 180
+    /// Typing a caption expands the sheet over 0.5 s on the `.spring` curve.
+    public static let captionExpandDuration: TimeInterval = 0.5
+
+    /// Glass, in from the "+" (`AttachmentController.animateIn`, glass):
+    /// the sheet grows out of the button's circle. Its centre travels on a
+    /// 0.4 s spring (damping 110, initial velocity 1.1), its size and
+    /// scale on a 0.45 s one (damping 110), its corners from round to 38
+    /// over 0.2 s; its page fades in over 0.2 s while the "+" glyph on the
+    /// growing glass fades in 0.15.
+    public enum Morph {
+        public static let positionDuration: TimeInterval = 0.4
+        public static let positionDamping: CGFloat = 110
+        public static let positionVelocity: CGFloat = 1.1
+        public static let scaleDuration: TimeInterval = 0.45
+        public static let scaleDamping: CGFloat = 110
+        public static let cornersDuration: TimeInterval = 0.2
+        public static let contentFadeIn: TimeInterval = 0.2
+        public static let glyphFade: TimeInterval = 0.15
+        /// Out, into the "+" (`animateOut`, glass): the centre on a 0.4 s
+        /// spring (damping 110), size and scale 0.3 s and corners 0.2 s
+        /// (damping 124), all with the drag's velocity; the page fades in
+        /// 0.12 s, the glass after 0.2 s over 0.15, the glyph comes back in 0.22.
+        public static let outScaleDuration: TimeInterval = 0.3
+        public static let outDamping: CGFloat = 124
+        public static let contentFadeOut: TimeInterval = 0.12
+        public static let glassFadeDelay: TimeInterval = 0.2
+        public static let glassFade: TimeInterval = 0.15
+        public static let outGlyphFade: TimeInterval = 0.22
+        /// The grown sheet's bottom corners: the screen's, less 2, at least 22.
+        public static func bottomRadius(screen: CGFloat) -> CGFloat { max(24, screen) - 2 }
+    }
+
     /// Switching tabs: the old page fades over 0.23 s while the sheet dips
     /// 10 in 0.2 s and springs back (damping 70) in 0.3.
     public static let switchFade: TimeInterval = 0.23
@@ -107,43 +161,6 @@ public enum AttachMenuMotion {
     public static let switchReturnDamping: CGFloat = 70
     /// The bar turning into "Add N" and back.
     public static let barDuration: TimeInterval = 0.4
-
-    /// Where a drag leaves the sheet (`AttachmentContainer.panGesture`).
-    public enum Settle: Equatable, Sendable {
-        case dismiss
-        case expand
-        case collapse
-        /// Back where it was, expanded or not.
-        case stay
-    }
-
-    /// `offset` is how far below its expanded top the sheet was dragged,
-    /// `drop` how far it was pulled below where it can rest, `velocity` the
-    /// finger's, down positive. `scrolled` is a grid scrolled off its top,
-    /// which takes the flick instead.
-    public static func settle(expanded: Bool, canCollapse: Bool, travel: CGFloat, offset: CGFloat, drop: CGFloat, velocity: CGFloat, scrolled: Bool) -> Settle {
-        let velocity = expanded && scrolled ? 0 : velocity
-        let threshold = canCollapse ? dismissDistance : 3 * dismissDistance
-        if drop > threshold || (drop > 0 && velocity > flick) || (expanded && drop == 0 && velocity > hardFlick) {
-            return .dismiss
-        }
-        guard canCollapse else { return .stay }
-        if expanded {
-            return velocity > flick || offset > travel / 2 ? .collapse : .stay
-        }
-        return velocity < -flick || offset < travel / 2 ? .expand : .stay
-    }
-
-    /// The drag's sheet: how far below its expanded top, and how far below
-    /// rest, `translation` (down positive) leaves a sheet that started
-    /// expanded or at rest.
-    public static func drag(expanded: Bool, canCollapse: Bool, travel: CGFloat, translation: CGFloat) -> (offset: CGFloat, drop: CGFloat) {
-        guard canCollapse else { return (0, max(0, translation)) }
-        if expanded {
-            return (min(travel, max(0, translation)), max(0, translation - travel))
-        }
-        return (max(0, travel + min(0, translation)), max(0, translation))
-    }
 }
 
 /// Where the sheet is, in the window's space, for any top edge.
@@ -258,61 +275,6 @@ public struct AttachMenuSheetLayout: Equatable, Sendable {
             barBottom: size.height + drop
         )
     }
-
-    /// The grabber at the top of a sheet, in the clip's space.
-    public func grabber(clipWidth: CGFloat) -> CGRect? {
-        guard style == .sheet else { return nil }
-        let size = AttachMenuMetrics.grabber
-        return CGRect(x: floor((clipWidth - size.width) / 2), y: AttachMenuMetrics.grabberTop, width: size.width, height: size.height)
-    }
-}
-
-/// The glass tab bar, or "Add N" while photos are picked, in the window's space.
-public struct AttachMenuBarLayout: Equatable, Sendable {
-    public struct Tab: Equatable, Sendable {
-        /// In the capsule's space.
-        public var frame: CGRect
-        public var icon: CGRect
-        public var title: CGRect
-    }
-
-    public var capsule: CGRect
-    public var cornerRadius: CGFloat
-    public var tabs: [Tab]
-    /// The selected tab's pill, in the capsule's space.
-    public var selection: CGRect
-    /// "Add N", centred in the capsule.
-    public var add: CGRect
-
-    /// `width` and `minX` are the sheet's, `bottom` its bottom edge;
-    /// `titles` the tabs' names measured, `addTitle` the button's.
-    public init(minX: CGFloat, width: CGFloat, bottom: CGFloat, titles: [CGSize], selected: Int, picking: Bool, addTitle: CGSize, pixel: CGFloat) {
-        typealias M = AttachMenuMetrics
-        let barWidth = min(M.barWidth(tabs: titles.count), max(0, width - 2 * M.barBottom))
-        let tabsCapsule = CGRect(x: minX + floor((width - barWidth) / 2), y: bottom - M.barBottom - M.barHeight, width: barWidth, height: M.barHeight)
-        let pitch = titles.count > 1 ? floor((barWidth - 2 * M.barInset - M.tabWidth) / CGFloat(titles.count - 1)) : 0
-        let iconTop = 9 + pixel
-        tabs = titles.enumerated().map { index, title in
-            let frame = CGRect(x: M.barInset + CGFloat(index) * pitch, y: 0, width: M.tabWidth, height: M.barHeight)
-            let icon = CGRect(x: frame.minX + (M.tabWidth - M.tabIcon) / 2, y: iconTop, width: M.tabIcon, height: M.tabIcon)
-            let titleWidth = min(ceil(title.width), M.tabWidth)
-            let titleHeight = ceil(title.height)
-            let centerY = icon.midY + 15 + 2 * pixel
-            return Tab(frame: frame, icon: icon, title: CGRect(x: frame.minX + floor((M.tabWidth - titleWidth) / 2), y: centerY - titleHeight / 2, width: titleWidth, height: titleHeight))
-        }
-        let chosen = tabs.indices.contains(selected) ? tabs[selected].frame : .zero
-        selection = CGRect(x: chosen.minX, y: M.barInset, width: chosen.width, height: M.barHeight - 2 * M.barInset)
-        if picking {
-            let addWidth = max(0, width - 2 * M.addSide)
-            capsule = CGRect(x: minX + M.addSide, y: bottom - M.barBottom - M.addHeight, width: addWidth, height: M.addHeight)
-        } else {
-            capsule = tabsCapsule
-        }
-        cornerRadius = capsule.height / 2
-        let addWidth = min(ceil(addTitle.width), capsule.width)
-        let addHeight = ceil(addTitle.height)
-        add = CGRect(x: floor((capsule.width - addWidth) / 2), y: floor((capsule.height - addHeight) / 2), width: addWidth, height: addHeight)
-    }
 }
 
 /// The library grid, Telegram's: the camera two cells tall at the top
@@ -344,9 +306,23 @@ public struct AttachMenuGridLayout: Equatable, Sendable {
         self.top = top
         self.count = max(0, count)
         self.camera = camera ? CGRect(x: left, y: top, width: side, height: 2 * side + M.spacing) : nil
-        let cells = self.count + (camera ? 2 : 0)
-        let rows = max(camera ? 2 : 0, (cells + columns - 1) / columns)
-        contentHeight = top + CGFloat(rows) * side + CGFloat(max(0, rows - 1)) * M.spacing
+        contentHeight = 0
+        contentHeight = height()
+    }
+
+    /// The same grid holding `count` pictures, as a batch of library
+    /// changes leaves it before the sheet lays it out again.
+    public func with(count: Int) -> AttachMenuGridLayout {
+        var copy = self
+        copy.count = max(0, count)
+        copy.contentHeight = copy.height()
+        return copy
+    }
+
+    private func height() -> CGFloat {
+        let cells = count + (camera != nil ? 2 : 0)
+        let rows = max(camera != nil ? 2 : 0, (cells + columns - 1) / columns)
+        return top + CGFloat(rows) * cell.height + CGFloat(max(0, rows - 1)) * AttachMenuMetrics.spacing
     }
 
     /// The cell holding picture `index`: row and column.
@@ -386,14 +362,177 @@ public struct AttachMenuGridLayout: Equatable, Sendable {
     }
 }
 
-/// The page under the header: the gallery's header, its limited-access
-/// note and grid, in the content's space.
+/// The glass panel at the sheet's foot (`AttachmentPanel`, glass), in the
+/// window's space: the tab bar with its lens, or while photos are picked
+/// the caption field with send, which the same glass becomes.
+public struct AttachMenuPanelLayout: Equatable, Sendable {
+    public struct Tab: Equatable, Sendable {
+        /// In the tab bar's space.
+        public var frame: CGRect
+        public var icon: CGRect
+        public var title: CGRect
+    }
+
+    /// The tab bar, where it rests (it rises 11 as the caption takes over).
+    public var tabBar: CGRect
+    public var tabs: [Tab]
+    /// The chosen tab's lens, in the tab bar's space.
+    public var lens: CGRect
+    /// The glass: the tab bar, or the caption.
+    public var glass: CGRect
+    public var glassRadius: CGFloat
+    /// The tabs' offset: up 11 while picking.
+    public var tabsOffset: CGFloat
+    /// The caption's parts, in the glass's space: the text, its
+    /// placeholder, and send with its capsule.
+    public var text: CGRect
+    public var placeholder: CGRect
+    public var send: CGRect
+    public var sendBackground: CGRect
+
+    public struct Input: Equatable, Sendable {
+        public var minX: CGFloat
+        public var width: CGFloat
+        /// The sheet's bottom edge, or with the keyboard up its top.
+        public var bottom: CGFloat
+        public var sides: LayoutInsets
+        /// The tabs' names measured.
+        public var titles: [CGSize]
+        public var selected: Int
+        public var picking: Bool
+        /// The caption has the keyboard.
+        public var focused: Bool
+        /// The caption's text measured at `textWidth(...)`, and its placeholder.
+        public var textHeight: CGFloat
+        public var placeholder: CGSize
+        public var empty: Bool
+        /// The tallest the caption grows.
+        public var maxHeight: CGFloat
+        public var pixel: CGFloat
+
+        public init(minX: CGFloat, width: CGFloat, bottom: CGFloat, sides: LayoutInsets = .zero, titles: [CGSize], selected: Int, picking: Bool, focused: Bool = false, textHeight: CGFloat = 0, placeholder: CGSize = .zero, empty: Bool = true, maxHeight: CGFloat = .greatestFiniteMagnitude, pixel: CGFloat) {
+            self.minX = minX
+            self.width = width
+            self.bottom = bottom
+            self.sides = sides
+            self.titles = titles
+            self.selected = selected
+            self.picking = picking
+            self.focused = focused
+            self.textHeight = textHeight
+            self.placeholder = placeholder
+            self.empty = empty
+            self.maxHeight = maxHeight
+            self.pixel = pixel
+        }
+    }
+
+    /// How wide the caption's text runs, for measuring it.
+    public static func textWidth(width: CGFloat, sides: LayoutInsets, focused: Bool) -> CGFloat {
+        typealias M = AttachMenuMetrics
+        let side = focused ? M.captionFocusedSide : M.captionSide
+        return max(0, width - sides.left - sides.right - 2 * side - M.captionTextInset - M.sendWidth)
+    }
+
+    public init(_ input: Input) {
+        typealias M = AttachMenuMetrics
+        let pixel = max(input.pixel, 0.0001)
+        let inner = max(0, input.width - input.sides.left - input.sides.right)
+        let barWidth = min(M.barWidth(tabs: input.titles.count), max(0, inner - 2 * M.barBottom))
+        tabBar = CGRect(x: input.minX + input.sides.left + floor((inner - barWidth) / 2 / pixel) * pixel, y: input.bottom - M.barBottom - M.barHeight, width: barWidth, height: M.barHeight)
+        // `AttachmentPanel.updateViews`, glass: tabs `tabWidth` wide spread
+        // over the bar less 3 each end, from the first's middle.
+        let count = input.titles.count
+        let pitch = count > 1 ? floor((barWidth - 2 * M.barInset - M.tabWidth) / CGFloat(count - 1) / pixel) * pixel : 0
+        let iconTop = M.tabIconTop + pixel
+        tabs = input.titles.enumerated().map { index, title in
+            let frame = CGRect(x: M.barInset + CGFloat(index) * pitch, y: 0, width: M.tabWidth, height: M.barHeight)
+            let icon = CGRect(x: frame.minX + floor((M.tabWidth - M.tabIcon) / 2 / pixel) * pixel, y: iconTop, width: M.tabIcon, height: M.tabIcon)
+            let titleWidth = min(ceil(title.width), M.tabWidth)
+            let titleHeight = ceil(title.height)
+            return Tab(frame: frame, icon: icon, title: CGRect(x: frame.minX + floor((M.tabWidth - titleWidth) / 2 / pixel) * pixel, y: icon.midY + M.tabTitleGap + 2 * pixel, width: titleWidth, height: titleHeight))
+        }
+        let chosen = tabs.indices.contains(input.selected) ? tabs[input.selected].frame : .zero
+        lens = CGRect(x: chosen.minX, y: M.barInset, width: chosen.width, height: M.barHeight - 2 * M.barInset)
+
+        let side = input.focused ? M.captionFocusedSide : M.captionSide
+        let spacing = input.focused ? M.captionFocusedBottom : M.captionBottom
+        let fieldWidth = max(0, inner - 2 * side)
+        let height = min(max(M.captionHeight, ceil(input.textHeight) + 19), max(M.captionHeight, input.maxHeight))
+        let field = CGRect(x: input.minX + input.sides.left + side, y: input.bottom - spacing - height, width: fieldWidth, height: height)
+        let textWidth = max(0, fieldWidth - M.captionTextInset - M.sendWidth)
+        text = CGRect(x: M.captionTextInset, y: floor((height - ceil(input.textHeight)) / 2 / pixel) * pixel, width: textWidth, height: min(ceil(input.textHeight), height))
+        send = CGRect(x: fieldWidth - M.sendWidth, y: 0, width: M.sendWidth, height: height)
+        let background = M.sendBackground
+        sendBackground = CGRect(x: fieldWidth - 3 - background.width, y: height - floor((M.captionHeight + background.height) / 2) - 0, width: background.width, height: background.height)
+        let placeholderWidth = min(ceil(input.placeholder.width), textWidth)
+        let placeholderHeight = ceil(input.placeholder.height)
+        // Unfocused and empty, "Add a caption…" sits in the field's middle.
+        let placeholderX = input.focused || !input.empty ? M.captionTextInset : floor((fieldWidth - placeholderWidth) / 2 / pixel) * pixel
+        placeholder = CGRect(x: placeholderX, y: floor((M.captionHeight - placeholderHeight) / 2 / pixel) * pixel + height - M.captionHeight, width: placeholderWidth, height: placeholderHeight)
+
+        if input.picking {
+            glass = field
+            glassRadius = min(M.captionRadius, height / 2)
+            tabsOffset = -M.tabsRise
+        } else {
+            glass = tabBar
+            glassRadius = M.barHeight / 2
+            tabsOffset = 0
+        }
+    }
+}
+
+/// The header over the grid (`MediaPickerScreen`'s glass controls and
+/// `MediaPickerTitleView`), in the content's space: close at the top left,
+/// the picked count beside it, the title and its album arrow centred.
+public struct AttachMenuHeaderLayout: Equatable, Sendable {
+    public var close: CGRect
+    /// The picked count's glass (`SelectedButtonNode`, glass): a check 24
+    /// at 6, the number at 27, 38 wider than the number.
+    public var count: CGRect
+    public var countIcon: CGRect
+    public var countLabel: CGRect
+    public var title: CGRect
+    public var arrow: CGRect?
+    /// The fade over a scrolled grid.
+    public var edge: CGRect
+
+    public static let countIcon: CGFloat = 24
+    public static let arrow = CGSize(width: 24, height: 24)
+
+    /// `arrow` is whether the title opens the albums.
+    public init(width: CGFloat, sides: LayoutInsets = .zero, title: CGSize, arrow hasArrow: Bool, countText: CGSize, pixel: CGFloat) {
+        typealias M = AttachMenuMetrics
+        let pixel = max(pixel, 0.0001)
+        let left = sides.left + M.headerInset
+        close = CGRect(x: left, y: M.headerInset, width: M.headerButton, height: M.headerButton)
+        let countWidth = ceil(countText.width) + 38
+        count = CGRect(x: close.maxX + M.headerGap, y: M.headerInset, width: countWidth, height: M.headerButton)
+        countIcon = CGRect(x: 6 + pixel, y: floor((M.headerButton - Self.countIcon) / 2) - pixel, width: Self.countIcon, height: Self.countIcon)
+        countLabel = CGRect(x: 27 - pixel, y: floor((M.headerButton - ceil(countText.height)) / 2 / pixel) * pixel, width: ceil(countText.width), height: ceil(countText.height))
+        // `MediaPickerTitleView`, glass: the title and the arrow 1 after it,
+        // centred together, 1 up; the arrow on the title's middle.
+        let titleSize = CGSize(width: ceil(title.width), height: ceil(title.height))
+        let total = titleSize.width + (hasArrow ? 1 + Self.arrow.width : 0)
+        let room = max(0, width - 2 * (count.maxX + M.headerGap))
+        let titleWidth = min(titleSize.width, max(0, room - (hasArrow ? 1 + Self.arrow.width : 0)))
+        let x = floor((width - min(total, room)) / 2 / pixel) * pixel
+        let top = floor((close.midY - titleSize.height / 2) / pixel) * pixel - 1
+        self.title = CGRect(x: x, y: top, width: titleWidth, height: titleSize.height)
+        arrow = hasArrow ? CGRect(x: x + titleWidth + 1, y: top + titleSize.height / 2 - Self.arrow.height / 2 + 1 - pixel, width: Self.arrow.width, height: Self.arrow.height) : nil
+        edge = CGRect(x: 0, y: 0, width: width, height: M.topEdge)
+    }
+}
+
+/// The page under the header: the gallery's limited-access note and grid
+/// running under the header, and the other pages below it, in the
+/// content's space.
 public struct AttachMenuContentLayout: Equatable, Sendable {
     public struct Input {
         public var width: CGFloat
         public var height: CGFloat
         public var sides: LayoutInsets
-        public var title: CGSize
         public var wide: Bool
         public var pixel: CGFloat
         public var count: Int
@@ -404,11 +543,10 @@ public struct AttachMenuContentLayout: Equatable, Sendable {
         /// The content below the screen (a resting sheet's).
         public var hidden: CGFloat
 
-        public init(width: CGFloat, height: CGFloat, sides: LayoutInsets = .zero, title: CGSize, wide: Bool, pixel: CGFloat, count: Int, camera: Bool, note: Measurable? = nil, noteButton: CGSize? = nil, hidden: CGFloat = 0) {
+        public init(width: CGFloat, height: CGFloat, sides: LayoutInsets = .zero, wide: Bool, pixel: CGFloat, count: Int, camera: Bool, note: Measurable? = nil, noteButton: CGSize? = nil, hidden: CGFloat = 0) {
             self.width = width
             self.height = height
             self.sides = sides
-            self.title = title
             self.wide = wide
             self.pixel = pixel
             self.count = count
@@ -419,12 +557,13 @@ public struct AttachMenuContentLayout: Equatable, Sendable {
         }
     }
 
-    public var close: CGRect
-    public var title: CGRect
-    /// Under the header, to the content's foot.
+    /// The grid's frame: the whole content, the header over its top.
+    public var gridFrame: CGRect
+    /// Under the header, to the content's foot: the other pages.
     public var page: CGRect
-    /// The grid in the page's space.
+    /// The grid, in its content's space, under its top inset.
     public var grid: AttachMenuGridLayout
+    public var topInset: CGFloat
     public var note: CGRect?
     public var noteText: CGRect?
     public var noteButton: CGRect?
@@ -437,12 +576,10 @@ public struct AttachMenuContentLayout: Equatable, Sendable {
         typealias M = AttachMenuMetrics
         typealias N = LibraryPickerLayout.Metrics
         let width = max(0, input.width)
-        close = SheetCloseLayout.frame(width: width - input.sides.right)
-        let titleWidth = min(ceil(max(0, input.title.width)), max(0, width - 2 * (width - close.minX + M.titleGap)))
-        let titleHeight = ceil(max(0, input.title.height))
-        title = CGRect(x: floor((width - titleWidth) / 2), y: floor(close.midY - titleHeight / 2), width: titleWidth, height: titleHeight)
-        let pageTop = close.maxY + M.headerBottom
-        page = CGRect(x: 0, y: pageTop, width: width, height: max(0, input.height - pageTop))
+        let height = max(0, input.height)
+        gridFrame = CGRect(x: 0, y: 0, width: width, height: height)
+        topInset = M.headerHeight
+        page = CGRect(x: 0, y: M.headerHeight, width: width, height: max(0, height - M.headerHeight))
         bottomInset = max(0, input.hidden) + M.barReserve
         visibleHeight = max(0, page.height - bottomInset)
 
@@ -452,11 +589,11 @@ public struct AttachMenuContentLayout: Equatable, Sendable {
             let inner = max(0, width - left - input.sides.right)
             let buttonWidth = ceil(button.width) + N.noteButtonPadding
             let text = measured.size(fitting: max(0, inner - N.noteTextInset - buttonWidth - N.noteGap))
-            let height = max(N.noteMinHeight, ceil(text.height) + N.notePadding)
-            note = CGRect(x: 0, y: 0, width: width, height: height)
-            noteText = CGRect(x: left + N.noteTextInset, y: floor((height - text.height) / 2) - N.noteLift, width: ceil(text.width), height: ceil(text.height))
-            noteButton = CGRect(x: width - input.sides.right - N.noteButtonInset - buttonWidth, y: floor((height - N.noteButtonHeight) / 2) - N.noteLift, width: buttonWidth, height: N.noteButtonHeight)
-            top = height
+            let noteHeight = max(N.noteMinHeight, ceil(text.height) + N.notePadding)
+            note = CGRect(x: 0, y: 0, width: width, height: noteHeight)
+            noteText = CGRect(x: left + N.noteTextInset, y: floor((noteHeight - text.height) / 2) - N.noteLift, width: ceil(text.width), height: ceil(text.height))
+            noteButton = CGRect(x: width - input.sides.right - N.noteButtonInset - buttonWidth, y: floor((noteHeight - N.noteButtonHeight) / 2) - N.noteLift, width: buttonWidth, height: N.noteButtonHeight)
+            top = noteHeight
         } else {
             note = nil
             noteText = nil

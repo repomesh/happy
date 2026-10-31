@@ -36,6 +36,8 @@ public final class UploadProgressBoard: @unchecked Sendable {
     public static func pictureKey(_ id: String, _ index: Int) -> String { "\(id):\(index + 1)" }
     /// The `index`th file of message `id`, as its `.sentFile` piece.
     public static func fileKey(_ id: String, _ index: Int) -> String { "\(id):f\(index + 1)" }
+    /// A legacy chat's file in the account's outbox, by its `localId`.
+    public static func outboxKey(_ localId: String) -> String { "outbox:\(localId)" }
 
     /// Which of a message's pictures or files a key names.
     public enum Piece: Equatable, Sendable {
@@ -83,6 +85,15 @@ public final class UploadProgressBoard: @unchecked Sendable {
                 wake = mark(key) ?? wake
             }
             return wake
+        }
+        wake?()
+    }
+
+    /// One piece forgotten: it went, failed, or was taken out.
+    public func clear(key: String) {
+        let wake: (@Sendable () -> Void)? = lock.withLock {
+            guard phases.removeValue(forKey: key) != nil else { return nil }
+            return mark(key)
         }
         wake?()
     }

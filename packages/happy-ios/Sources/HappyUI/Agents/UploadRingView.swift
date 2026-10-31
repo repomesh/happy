@@ -170,6 +170,14 @@ final class UploadRingView: UIView {
     }
 }
 
+/// A tile that shows a sending picture's ring: the agent chat's media
+/// (`ChatMediaView`) and the legacy chat's attachment (`ChatAttachmentView`).
+@MainActor
+protocol UploadRingTile: AnyObject {
+    /// Where its bytes are, as the board last said.
+    func setUpload(_ phase: UploadPhase?, animated: Bool)
+}
+
 /// The tiles showing a sending picture, by its key, and the one drain of
 /// `UploadProgressBoard` a frame that moves their rings: however fast the
 /// bytes go, each ring is touched at most once a frame, with its latest
@@ -179,7 +187,9 @@ final class UploadRings {
     static let shared = UploadRings(board: .shared)
 
     private let board: UploadProgressBoard
-    private let tiles = NSMapTable<NSString, ChatMediaView>.strongToWeakObjects()
+    /// By key: more than one tile may show the same picture a moment (a row
+    /// drawn again beside the one going), and each hears every frame.
+    private var tiles: [String: NSHashTable<AnyObject>] = [:]
     private var link: CADisplayLink?
     /// Applies a frame has made, for tests.
     private(set) var applied = 0
@@ -195,10 +205,16 @@ final class UploadRings {
 
     func phase(_ key: String) -> UploadPhase? { board.phase(key) }
 
-    func show(_ tile: ChatMediaView, key: String) { tiles.setObject(tile, forKey: key as NSString) }
+    func show(_ tile: UploadRingTile, key: String) {
+        let shown = tiles[key] ?? .weakObjects()
+        shown.add(tile)
+        tiles[key] = shown
+    }
 
-    func forget(_ tile: ChatMediaView, key: String) {
-        if tiles.object(forKey: key as NSString) === tile { tiles.removeObject(forKey: key as NSString) }
+    func forget(_ tile: UploadRingTile, key: String) {
+        guard let shown = tiles[key] else { return }
+        shown.remove(tile)
+        if shown.allObjects.isEmpty { tiles[key] = nil }
     }
 
     private func wake() {
@@ -215,12 +231,16 @@ final class UploadRings {
         drain()
     }
 
-    /// Everything that changed since the last frame, each to its own tile.
+    /// Everything that changed since the last frame, each to its own tiles.
     func drain() {
         for (key, phase) in board.drain() {
-            guard let tile = tiles.object(forKey: key as NSString) else { continue }
-            tile.setUpload(phase, animated: true)
-            applied += 1
+            guard let shown = tiles[key] else { continue }
+            let live = shown.allObjects.compactMap { $0 as? UploadRingTile }
+            if live.isEmpty { tiles[key] = nil }
+            for tile in live {
+                tile.setUpload(phase, animated: true)
+                applied += 1
+            }
         }
     }
 }

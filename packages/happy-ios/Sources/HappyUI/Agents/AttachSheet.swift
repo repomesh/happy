@@ -3,14 +3,20 @@ import HappyIcons
 import HappyLayout
 import UIKit
 
-/// The composer's "+" menu, after Telegram's attachment menu
+/// The composer's "+" menu, Telegram's attachment menu ported to UIKit
 /// (`AttachmentController`, `AttachmentContainer`, `AttachmentPanel`,
-/// `MediaPickerScreen`): a sheet that slides up over the dimmed chat and
-/// rests a quarter of the way down, drags up to fill the screen and down
-/// to go. Its Gallery tab is the library newest first, with the camera two
-/// cells tall at the top left, picked in order with numbered circles; the
-/// glass tab bar at its foot turns into "Add N" while anything is picked.
-/// Its Files tab offers Files and the system's photo picker.
+/// `MediaPickerScreen`): a sheet that grows out of the "+" over the dimmed
+/// chat and rests a quarter of the way down, drags up to fill the screen
+/// and down to go. Its Gallery tab is the library newest first under a
+/// glass header, the camera live and two cells tall at the top left,
+/// picked in order with numbered circles; the glass tab bar at its foot
+/// turns into the caption with send while anything is picked. Its File
+/// tab offers Files and the system's photo picker.
+///
+/// The gestures are Telegram's, number for number (`AttachSheetPan`,
+/// `AttachSelectionDrag`, `AttachTabLens`): the sheet and the grid share
+/// the finger, a sideways drag over the grid picks, the tab bar's lens
+/// follows the finger, a pull that would drop picks asks first.
 ///
 /// The library is asked for the moment the gallery needs it. Limited
 /// access shows what was allowed with a note to manage it; without access
@@ -20,14 +26,15 @@ import UIKit
 /// It only says what was chosen: the menu goes first, then `onAction`
 /// hears it. On an iPad it is a card over the "+" instead.
 @MainActor
-final class AttachSheetViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UIGestureRecognizerDelegate {
+final class AttachSheetViewController: UIViewController, UICollectionViewDelegate, UIGestureRecognizerDelegate {
     enum Action: Equatable {
         case camera
         /// The system's photo picker, which needs no access.
         case photos
         case files
-        /// Picked in the grid, by the library's ids, in order.
-        case add([String])
+        /// Picked in the grid, by the library's ids, in order, sent now
+        /// with the caption.
+        case send([String], caption: String)
     }
 
     enum Tab: Int {
@@ -38,8 +45,13 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
     var onAction: ((Action) -> Void)?
     /// Closed, tapped outside or dragged away with nothing chosen.
     var onGone: (() -> Void)?
+    /// The caption as it is typed, for the composer's draft.
+    var onCaption: ((String) -> Void)?
     /// The "+" in this view's space, for the iPad's card.
     var source: (() -> CGRect?)?
+    /// The "+" itself: the sheet grows out of it and goes back into it
+    /// (Telegram's glass style); without it the sheet slides.
+    var button: (() -> UIView?)?
 
     let library: AttachLibrary
     private let limit: Int
@@ -49,50 +61,77 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
     private(set) var picked: [String] = []
     private(set) var expanded = false
     private(set) var access: AttachLibraryAccess
-    /// The sheet's top edge and how far below it is pulled, in the view's space.
-    private var top: CGFloat = 0
-    private var drop: CGFloat = 0
+    /// The sheet's top edge, and how far the whole sheet is pulled below it.
+    private(set) var top: CGFloat = 0
+    private(set) var drop: CGFloat = 0
     /// The dip a tab switch gives the sheet.
     private var dip: CGFloat = 0
+    /// The keyboard over the view, while the caption has it.
+    private(set) var keyboard: CGFloat = 0
     private var shown = false
-    private var closing = false
+    private(set) var closing = false
     private var asked = false
-    private var sheet: AttachMenuSheetLayout?
+    private var asking = false
+    private(set) var sheet: AttachMenuSheetLayout?
     private var content: AttachMenuContentLayout?
     private var settling: UIViewPropertyAnimator?
+    private var dropping: UIViewPropertyAnimator?
+    private var morphing = false
+    /// The "+" while the sheet stands in for it.
+    private weak var hiddenButton: UIView?
 
     private let dim = UIView()
+    /// Telegram's `AttachmentContainer`: the sheet and its panel, whose
+    /// bounds drop it below where its top rests.
+    private let host = UIView()
     private let shadow = UIView()
     private let clip = UIView()
+    private let ground = UIView()
     private let body = UIView()
-    private let grabber = UIView()
+    private let morphGlass: UIVisualEffectView = {
+        let effect = UIGlassEffect(style: .regular)
+        return UIVisualEffectView(effect: effect)
+    }()
+    private let morphGlyph = UIImageView(image: UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)))
+    private let edge = AttachMenuTopEdge()
     private let closeGlass: UIVisualEffectView = {
         let effect = UIGlassEffect(style: .regular)
         effect.isInteractive = true
         return UIVisualEffectView(effect: effect)
     }()
-    private let closeButton = UIButton(type: .system)
+    private let closeButton = UIButton(type: .custom)
+    private let countGlass: UIVisualEffectView = {
+        let effect = UIGlassEffect(style: .regular)
+        effect.tintColor = UIColor(Palette.attachMenuAccent)
+        return UIVisualEffectView(effect: effect)
+    }()
+    private let countIcon = UIImageView(image: UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)))
+    private let countLabel = UILabel()
     private let titleLabel = UILabel()
+    private var titleDark = false
     private let gallery = UIView()
     private let gridLayout = AttachGridCollectionLayout()
-    private lazy var grid = UICollectionView(frame: .zero, collectionViewLayout: gridLayout)
-    private let cameraTile = AttachCameraTile()
+    private(set) lazy var grid = UICollectionView(frame: .zero, collectionViewLayout: gridLayout)
+    private(set) lazy var feed = AttachGridFeed(library: library, grid: grid)
+    let cameraTile = AttachCameraTile()
     private let note = UIView()
     private let noteText = UILabel()
     private let noteButton = UIButton(type: .custom)
     private let placeholder = AttachMenuPlaceholderView()
     private let files = AttachMenuFilesView()
-    private let bar = AttachMenuBar()
+    let panel = AttachMenuPanel()
     private let pan = UIPanGestureRecognizer()
-    private let haptic = UISelectionFeedbackGenerator()
+    let picking = AttachSelectionRecognizer()
+    private weak var preview: AttachPreviewViewController?
 
-    init(limit: Int, library: AttachLibrary = AttachMenuEnvironment.library(), camera: Bool = AttachMenuEnvironment.camera()) {
+    init(limit: Int, caption: String = "", library: AttachLibrary = AttachMenuEnvironment.library(), camera: Bool = AttachMenuEnvironment.camera()) {
         self.limit = limit
         self.library = library
         hasCamera = camera
         access = library.access
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .overFullScreen
+        panel.caption = caption
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -107,61 +146,55 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
         dim.accessibilityIdentifier = "attach-dim"
         dim.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(dimTapped)))
         view.addSubview(dim)
+        view.addSubview(host)
 
-        shadow.backgroundColor = UIColor(Palette.libraryGround)
+        shadow.backgroundColor = UIColor(Palette.attachMenuGround)
         shadow.layer.shadowColor = UIColor.black.cgColor
         shadow.layer.shadowOpacity = 0.3
         shadow.layer.shadowRadius = 40
         shadow.layer.shadowOffset = .zero
         shadow.layer.cornerCurve = .continuous
         shadow.isUserInteractionEnabled = false
-        view.addSubview(shadow)
+        host.addSubview(shadow)
 
-        clip.backgroundColor = UIColor(Palette.libraryGround)
         clip.clipsToBounds = true
         clip.layer.cornerCurve = .continuous
         clip.accessibilityIdentifier = "attach-sheet"
-        view.addSubview(clip)
+        host.addSubview(clip)
+        morphGlass.isHidden = true
+        morphGlyph.tintColor = UIColor(Palette.attachMenuControl)
+        morphGlyph.contentMode = .center
+        morphGlass.contentView.addSubview(morphGlyph)
+        morphGlass.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        morphGlyph.autoresizingMask = [.flexibleLeftMargin, .flexibleRightMargin, .flexibleTopMargin, .flexibleBottomMargin]
+        clip.addSubview(morphGlass)
+        ground.backgroundColor = UIColor(Palette.attachMenuGround)
+        ground.isUserInteractionEnabled = false
+        ground.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        clip.addSubview(ground)
         clip.addSubview(body)
-        grabber.backgroundColor = UIColor(Palette.attachMenuGrabber)
-        grabber.layer.cornerRadius = AttachMenuMetrics.grabber.height / 2
-        grabber.isUserInteractionEnabled = false
-        clip.addSubview(grabber)
-
-        closeButton.setImage(.icon(.ionicons("close"), size: 24), for: .normal)
-        closeButton.tintColor = UIColor(Palette.headerTint)
-        closeButton.accessibilityLabel = Strings.close
-        closeButton.accessibilityIdentifier = "attach-close"
-        closeButton.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
-        closeGlass.cornerConfiguration = .capsule()
-        closeGlass.contentView.addSubview(closeButton)
-
-        titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
-        titleLabel.textColor = UIColor(Palette.text)
-        titleLabel.textAlignment = .center
-        titleLabel.accessibilityTraits = .header
-        titleLabel.accessibilityIdentifier = "attach-title"
 
         grid.backgroundColor = .clear
-        grid.dataSource = self
         grid.delegate = self
         grid.alwaysBounceVertical = true
         grid.contentInsetAdjustmentBehavior = .never
         grid.accessibilityIdentifier = "attach-grid"
-        grid.register(AttachGridCell.self, forCellWithReuseIdentifier: AttachGridCell.id)
         cameraTile.addAction(UIAction { [weak self] _ in self?.finish(.camera) }, for: .touchUpInside)
         grid.addSubview(cameraTile)
+        feed.number = { [weak self] id in self?.number(id) }
+        feed.onCheck = { [weak self] index in self?.check(index) }
+        feed.onOpen = { [weak self] index in self?.open(index) }
 
         noteText.text = Strings.Library.limited
         noteText.font = UIFontMetrics(forTextStyle: .subheadline).scaledFont(for: .systemFont(ofSize: 15))
         noteText.adjustsFontForContentSizeCategory = true
-        noteText.textColor = UIColor(Palette.libraryNoteText)
+        noteText.textColor = UIColor(Palette.attachMenuNote)
         noteText.numberOfLines = 0
         var manage = AttributedString(Strings.Library.manage.uppercased())
         manage.font = .systemFont(ofSize: 15, weight: .semibold)
-        manage.foregroundColor = UIColor(Palette.libraryNoteButtonText)
+        manage.foregroundColor = UIColor(Palette.attachMenuOnAccent)
         noteButton.setAttributedTitle(NSAttributedString(manage), for: .normal)
-        noteButton.backgroundColor = UIColor(Palette.libraryNoteButton)
+        noteButton.backgroundColor = UIColor(Palette.attachMenuAccent)
         noteButton.layer.cornerRadius = LibraryPickerLayout.Metrics.noteButtonHeight / 2
         noteButton.accessibilityIdentifier = "attach-manage"
         noteButton.showsMenuAsPrimaryAction = true
@@ -189,29 +222,65 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
         files.onFiles = { [weak self] in self?.finish(.files) }
         files.onPhotos = { [weak self] in self?.finish(.photos) }
 
-        for view in [gallery, files, closeGlass, titleLabel] as [UIView] { body.addSubview(view) }
+        // Telegram's glass header: close at the top left, the picked count
+        // beside it, the title in the middle; the fade under them once
+        // the grid scrolls.
+        edge.alpha = 0
+        closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)), for: .normal)
+        closeButton.tintColor = UIColor(Palette.attachMenuControl)
+        closeButton.accessibilityLabel = Strings.close
+        closeButton.accessibilityIdentifier = "attach-close"
+        closeButton.addAction(UIAction { [weak self] _ in self?.requestClose() }, for: .touchUpInside)
+        closeGlass.cornerConfiguration = .capsule()
+        closeGlass.contentView.addSubview(closeButton)
+        countGlass.cornerConfiguration = .capsule()
+        countIcon.tintColor = UIColor(Palette.attachMenuOnAccent)
+        countIcon.contentMode = .center
+        countLabel.font = .monospacedDigitSystemFont(ofSize: 17, weight: .medium)
+        countLabel.textColor = UIColor(Palette.attachMenuOnAccent)
+        countGlass.contentView.addSubview(countIcon)
+        countGlass.contentView.addSubview(countLabel)
+        countGlass.isAccessibilityElement = true
+        countGlass.accessibilityIdentifier = "attach-count"
+        countGlass.alpha = 0
+        countGlass.transform = CGAffineTransform(scaleX: 0.01, y: 0.01)
+        titleLabel.font = .monospacedDigitSystemFont(ofSize: 17, weight: .semibold)
+        titleLabel.textColor = UIColor(Palette.attachMenuTitle)
+        titleLabel.textAlignment = .center
+        titleLabel.accessibilityTraits = .header
+        titleLabel.accessibilityIdentifier = "attach-title"
 
-        bar.titles = [Strings.AttachMenu.gallery, Strings.AttachMenu.files]
-        bar.icons = [.ionicons("images"), .ionicons("folder")]
-        bar.ids = ["attach-tab-gallery", "attach-tab-files"]
-        bar.onTab = { [weak self] index in self?.switchTo(Tab(rawValue: index) ?? .gallery) }
-        bar.onAdd = { [weak self] in
-            guard let self, !picked.isEmpty else { return }
-            finish(.add(picked))
-        }
-        view.addSubview(bar)
+        for view in [gallery, files, edge, closeGlass, countGlass, titleLabel] as [UIView] { body.addSubview(view) }
+
+        panel.setTabs([
+            (Strings.AttachMenu.gallery, AttachMenuPanel.glyph("photo.fill.on.rectangle.fill"), "attach-tab-gallery"),
+            (Strings.AttachMenu.files, AttachMenuPanel.glyph("doc.fill"), "attach-tab-files"),
+        ])
+        panel.onTab = { [weak self] index in self?.switchTo(Tab(rawValue: index) ?? .gallery) }
+        panel.onSend = { [weak self] in self?.sendPicked() }
+        panel.onCaption = { [weak self] text in self?.onCaption?(text) }
+        panel.onFocus = { [weak self] focused in self?.captionFocused(focused) }
+        panel.onResize = { [weak self] in self?.view.setNeedsLayout() }
+        host.addSubview(panel)
 
         pan.addTarget(self, action: #selector(panned(_:)))
         pan.delegate = self
-        clip.addGestureRecognizer(pan)
+        host.addGestureRecognizer(pan)
+        picking.delegate = self
+        picking.sheet = self
+        grid.addGestureRecognizer(picking)
 
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardChanged(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardChanged(_:)), name: UIResponder.keyboardWillHideNotification, object: nil)
         registerForTraitChanges([UITraitPreferredContentSizeCategory.self, UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self]) { (self: Self, _) in
             self.view.setNeedsLayout()
         }
-        library.onChange = { [weak self] in self?.libraryChanged() }
+        library.onChange = { [weak self] in self?.feed.changed() }
+        feed.onApplied = { [weak self] change in self?.libraryApplied(change) }
         showTab()
         showAccess(animated: false)
-        if access.reads { library.load { [weak self] in self?.libraryChanged() } }
+        updateCount(animated: false)
+        if access.reads { library.load { [weak self] in self?.loaded() } }
     }
 
     override func viewIsAppearing(_ animated: Bool) {
@@ -226,7 +295,7 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
     }
 
     override func accessibilityPerformEscape() -> Bool {
-        close()
+        requestClose()
         return true
     }
 
@@ -240,22 +309,37 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
             guard let self else { return }
             access = answer
             showAccess(animated: true)
-            if answer.reads { library.load { [weak self] in self?.libraryChanged() } }
+            if answer.reads { library.load { [weak self] in self?.loaded() } }
         }
     }
 
-    private func libraryChanged() {
+    private func loaded() {
+        access = library.access
+        if feed.loaded {
+            feed.changed()
+        } else {
+            feed.load()
+        }
+        showAccess(animated: false)
+        view.setNeedsLayout()
+    }
+
+    /// A change landed in the grid: picks the library no longer shows go.
+    private func libraryApplied(_ change: AttachLibraryChange) {
         let before = access
         access = library.access
-        // The picks the library no longer shows go.
-        let live = Set((0..<library.count).compactMap { library.item(at: $0)?.id })
-        let kept = picked.filter(live.contains)
-        if kept != picked {
-            picked = kept
-            bar.setCount(picked.count, animated: true)
+        switch change {
+        case .none, .update(removed: [], _, _, _):
+            break
+        default:
+            let kept = picked.filter(library.contains)
+            if kept != picked {
+                picked = kept
+                feed.refreshNumbers(animating: nil)
+                updateCount(animated: true)
+            }
         }
-        showAccess(animated: before != access)
-        grid.reloadData()
+        if before != access { showAccess(animated: true) }
         view.setNeedsLayout()
     }
 
@@ -266,11 +350,11 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
         grid.isHidden = denied
         placeholder.isHidden = !denied
         note.isHidden = access != .limited
-        titleLabel.text = page == .files ? Strings.AttachMenu.files : Strings.AttachMenu.recents
         if denied, wasHidden, animated {
             placeholder.alpha = 0
             UIView.animate(withDuration: 0.3) { self.placeholder.alpha = 1 }
         }
+        updateEdge(animated: false)
         view.setNeedsLayout()
     }
 
@@ -296,29 +380,62 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
                 top = next.top(expanded: expanded)
             }
         }
+        guard !morphing else { return }
         place()
         layoutBody()
     }
 
     /// Where the sheet is: cheap enough for every frame of a drag.
     private func place() {
+        placeSheet()
+        placeDrop()
+    }
+
+    /// The sheet's top: its clip, scaled 5 in from the sides at rest.
+    private func placeSheet() {
         guard let sheet else { return }
-        let placement = sheet.placement(top: top, drop: drop + dip)
+        let placement = sheet.placement(top: top)
         clip.transform = .identity
         clip.bounds = CGRect(origin: .zero, size: placement.clip.size)
         clip.center = CGPoint(x: placement.clip.midX, y: placement.clip.midY)
         clip.transform = CGAffineTransform(scaleX: placement.scale, y: placement.scale)
-        clip.layer.cornerRadius = sheet.cornerRadius
-        clip.layer.maskedCorners = sheet.style == .sheet && view.safeAreaInsets.bottom == 0
-            ? [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-            : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        clip.cornerConfiguration = corners(sheet)
+        ground.frame = clip.bounds
+        morphGlass.frame = clip.bounds
+        morphGlyph.frame = morphGlass.bounds
         body.frame = placement.content
-        grabber.isHidden = sheet.grabber(clipWidth: placement.clip.width) == nil
-        grabber.frame = sheet.grabber(clipWidth: placement.clip.width) ?? .zero
         shadow.isHidden = sheet.style != .card
         shadow.frame = placement.clip
         shadow.layer.cornerRadius = sheet.cornerRadius
-        bar.place(minX: placement.clip.minX, width: placement.clip.width, bottom: placement.barBottom, pixel: view.hairline)
+        placePanel()
+    }
+
+    /// Telegram's container offset: the whole sheet, its panel too, below
+    /// where its top rests.
+    private func placeDrop() {
+        host.frame = view.bounds
+        host.bounds.origin.y = -(drop + dip)
+    }
+
+    /// The panel at the sheet's foot, or on the keyboard while the caption has it.
+    private func placePanel() {
+        guard let sheet else { return }
+        let placement = sheet.placement(top: top)
+        let bottom = keyboard > 0 ? view.bounds.height - keyboard : placement.barBottom
+        let maxHeight = max(AttachMenuMetrics.captionHeight, floor((view.bounds.height - keyboard - sheet.expandedTop) / 3))
+        panel.place(minX: placement.clip.minX, width: placement.clip.width, bottom: bottom, sides: sheet.sides, pixel: view.hairline, maxHeight: maxHeight)
+    }
+
+    /// The top corners 38; the bottom ones the screen's, less 2, when the
+    /// sheet stands on the screen's foot.
+    private func corners(_ sheet: AttachMenuSheetLayout) -> UICornerConfiguration {
+        switch sheet.style {
+        case .card: return .uniformCorners(radius: .fixed(sheet.cornerRadius))
+        case .fullScreen: return .uniformCorners(radius: .fixed(0))
+        case .sheet:
+            let screen: CGFloat = view.safeAreaInsets.bottom > 0 ? 55 : 0
+            return .uniformEdges(topRadius: .fixed(sheet.cornerRadius), bottomRadius: .fixed(AttachMenuMotion.Morph.bottomRadius(screen: screen)))
+        }
     }
 
     /// The header and the page, for the sheet's content size and how much
@@ -329,18 +446,14 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
         let showsNote = access == .limited
         let layout = AttachMenuContentLayout(.init(
             width: placement.content.width, height: placement.content.height, sides: sheet.sides,
-            title: titleLabel.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: 44)),
             wide: sheet.style == .fullScreen, pixel: view.hairline,
-            count: access.reads ? library.count : 0, camera: hasCamera && access != .denied,
+            count: access.reads ? feed.count : 0, camera: hasCamera && access != .denied,
             note: showsNote ? noteText.measurable : nil,
             noteButton: showsNote ? noteButton.titleLabel?.intrinsicContentSize : nil,
             hidden: placement.hidden
         ))
         content = layout
-        closeGlass.frame = layout.close
-        closeButton.frame = closeGlass.bounds
-        titleLabel.setLayoutFrame(layout.title)
-        gallery.frame = layout.page
+        gallery.frame = layout.gridFrame
         files.frame = layout.page
         grid.frame = gallery.bounds
         gridLayout.grid = layout.grid
@@ -351,63 +464,203 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
             noteText.setLayoutFrame(layout.noteText ?? .zero)
             noteButton.setLayoutFrame(layout.noteButton ?? .zero)
         }
-        let inset = UIEdgeInsets(top: 0, left: 0, bottom: layout.bottomInset, right: 0)
+        let inset = UIEdgeInsets(top: layout.topInset, left: 0, bottom: layout.bottomInset, right: 0)
         if grid.contentInset != inset {
+            let atTop = grid.contentOffset.y <= -grid.adjustedContentInset.top + AttachSheetPan.topSlop
             grid.contentInset = inset
             grid.verticalScrollIndicatorInsets = inset
+            if atTop { grid.contentOffset.y = -inset.top }
         }
-        placeholder.frame = gallery.bounds
+        placeholder.frame = layout.page
         placeholder.place(visibleHeight: layout.visibleHeight, bottomInset: layout.bottomInset, upright: sheet.style != .fullScreen)
         files.place(sides: sheet.sides, bottomInset: layout.bottomInset, pixel: view.hairline)
-        prepareThumbnails()
+        layoutHeader()
+        feed.scrolled()
+    }
+
+    private func layoutHeader() {
+        guard let sheet else { return }
+        let unbounded = CGSize(width: CGFloat.greatestFiniteMagnitude, height: 44)
+        let header = AttachMenuHeaderLayout(width: body.bounds.width, sides: sheet.sides, title: titleLabel.sizeThatFits(unbounded), arrow: false, countText: countLabel.sizeThatFits(unbounded), pixel: view.hairline)
+        closeGlass.frame = header.close
+        closeButton.frame = closeGlass.bounds
+        countGlass.bounds = CGRect(origin: .zero, size: header.count.size)
+        countGlass.center = CGPoint(x: header.count.midX, y: header.count.midY)
+        countIcon.frame = header.countIcon
+        countLabel.frame = header.countLabel
+        titleLabel.setLayoutFrame(header.title)
+        edge.frame = header.edge
+    }
+
+    /// The fade under the header once the grid scrolls 5, the title white from 30.
+    private func updateEdge(animated: Bool) {
+        let scrolled = page == .gallery && !grid.isHidden ? grid.contentOffset.y + grid.adjustedContentInset.top : 0
+        let shows = scrolled >= AttachMenuMetrics.topEdgeFrom
+        let dark = scrolled >= AttachMenuMetrics.darkTitleFrom
+        if (edge.alpha > 0) != shows {
+            let apply = { self.edge.alpha = shows ? 1 : 0 }
+            animated ? UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: apply) : apply()
+        }
+        if dark != titleDark {
+            titleDark = dark
+            let apply = { self.titleLabel.textColor = dark ? .white : UIColor(Palette.attachMenuTitle) }
+            animated ? UIView.transition(with: titleLabel, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction], animations: apply) : apply()
+        }
+    }
+
+    /// The picked count beside close (`SelectedButtonNode`): it grows from
+    /// nothing with the first pick and shrinks away with the last; the
+    /// panel turns into the caption with it.
+    private func updateCount(animated: Bool) {
+        let count = picked.count
+        if count > 0 {
+            countLabel.text = "\(count)"
+            countGlass.accessibilityLabel = Strings.AttachMenu.picked(count)
+        }
+        layoutHeader()
+        panel.setPicking(count > 0, animated: animated && shown)
+        let visible = count > 0
+        let apply = {
+            self.countGlass.alpha = visible ? 1 : 0
+            self.countGlass.transform = visible ? .identity : CGAffineTransform(scaleX: 0.01, y: 0.01)
+        }
+        if animated, shown {
+            UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.78, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: apply)
+        } else {
+            apply()
+        }
+        view.setNeedsLayout()
     }
 
     // MARK: Motion
 
-    /// Telegram's in: up from below the screen over 0.4 s while the dim
-    /// fades in over 0.3; an iPad's card the same, its dim a tenth as dark.
+    /// How the menu goes.
+    private enum Leaving {
+        /// Back into the "+" (glass), or down past the screen.
+        case closed
+        /// Dragged away at this speed.
+        case dragged(CGFloat)
+    }
+
+    /// Telegram's in: out of the "+" on glass where there is one, else up
+    /// from below the screen over 0.4 s; the dim fades in over 0.3, linear;
+    /// an iPad's card the same, its dim a tenth as dark.
     private func animateIn() {
         guard !shown, let sheet else { return }
         shown = true
         expanded = !sheet.canCollapse
         top = sheet.top(expanded: expanded)
-        drop = view.bounds.height
+        drop = 0
         place()
         layoutBody()
         dim.alpha = 0
-        let curve = AttachMenuMotion.openCurve
-        let animator = UIViewPropertyAnimator(duration: AttachMenuMotion.openDuration, controlPoint1: CGPoint(x: CGFloat(curve.x1), y: CGFloat(curve.y1)), controlPoint2: CGPoint(x: CGFloat(curve.x2), y: CGFloat(curve.y2))) {
-            self.drop = 0
-            self.place()
-        }
-        animator.isUserInteractionEnabled = true
-        animator.startAnimation()
         let dimTarget = sheet.style == .card ? AttachMenuMotion.cardDimShare : 1
         UIView.animate(withDuration: AttachMenuMotion.dimDuration, delay: 0, options: [.curveLinear, .allowUserInteraction]) {
             self.dim.alpha = dimTarget
         }
+        if sheet.style == .sheet, let button = button?(), button.window === view.window, !UIAccessibility.isReduceMotionEnabled {
+            morphIn(from: button)
+            return
+        }
+        drop = view.bounds.height
+        placeDrop()
+        let animator = UIViewPropertyAnimator(duration: AttachMenuMotion.openDuration, timingParameters: AttachMenuSprings.openCurve())
+        animator.addAnimations {
+            self.drop = 0
+            self.placeDrop()
+        }
+        animator.isUserInteractionEnabled = true
+        animator.startAnimation()
+    }
+
+    /// `AttachmentController.animateIn`, glass: the sheet's clip grows out
+    /// of the "+" circle, its centre on one spring and its size on another,
+    /// its corners from round to the sheet's; the page fades in over the
+    /// growing glass as the "+" on it fades.
+    private func morphIn(from button: UIView) {
+        guard let sheet else { return }
+        typealias M = AttachMenuMotion.Morph
+        let source = button.convert(button.bounds, to: host)
+        let target = (center: clip.center, bounds: clip.bounds, transform: clip.transform)
+        morphing = true
+        hiddenButton = button
+        button.alpha = 0
+        clip.transform = .identity
+        clip.bounds = CGRect(origin: .zero, size: source.size)
+        clip.center = CGPoint(x: source.midX, y: source.midY)
+        clip.cornerConfiguration = .uniformCorners(radius: .fixed(source.height / 2))
+        morphGlass.isHidden = false
+        morphGlass.alpha = 1
+        morphGlyph.alpha = 1
+        ground.alpha = 0
+        body.alpha = 0
+        panel.alpha = 0
+        let position = UIViewPropertyAnimator(duration: M.positionDuration, timingParameters: AttachMenuSprings.custom(damping: M.positionDamping, duration: M.positionDuration, velocity: M.positionVelocity))
+        position.addAnimations { self.clip.center = target.center }
+        let size = UIViewPropertyAnimator(duration: M.scaleDuration, timingParameters: AttachMenuSprings.custom(damping: M.scaleDamping, duration: M.scaleDuration, velocity: 0))
+        size.addAnimations {
+            self.clip.bounds = target.bounds
+            self.clip.transform = target.transform
+        }
+        size.addCompletion { [weak self] _ in
+            guard let self else { return }
+            morphing = false
+            morphGlass.isHidden = true
+            view.setNeedsLayout()
+        }
+        for animator in [position, size] {
+            animator.isUserInteractionEnabled = true
+            animator.startAnimation()
+        }
+        UIView.animate(withDuration: M.cornersDuration, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+            self.clip.cornerConfiguration = self.corners(sheet)
+        }
+        UIView.animate(withDuration: M.contentFadeIn, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+            self.ground.alpha = 1
+            self.body.alpha = 1
+            self.panel.alpha = 1
+            self.morphGlass.alpha = 0
+        }
+        UIView.animate(withDuration: M.glyphFade, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+            self.morphGlyph.alpha = 0
+        }
+    }
+
+    /// Closes as Telegram does: with picks, asks first (`requestDismiss`).
+    func requestClose() {
+        guard !closing else { return }
+        guard !picked.isEmpty else { return close() }
+        let alert = UIAlertController(title: nil, message: Strings.AttachMenu.cancelSelection, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: Strings.AttachMenu.cancelSelectionNo, style: .cancel))
+        alert.addAction(UIAlertAction(title: Strings.AttachMenu.cancelSelectionYes, style: .default) { [weak self] _ in self?.close() })
+        present(alert, animated: true)
     }
 
     func close() {
         let onGone = onGone
-        leave { onGone?() }
+        leave(.closed) { onGone?() }
     }
 
     /// The menu goes, then the choice is heard over what it covered.
     private func finish(_ action: Action) {
         let onAction = onAction
-        leave { onAction?(action) }
+        leave(.closed) { onAction?(action) }
     }
 
-    /// Telegram's out: down past the screen in 0.25 s with the dim; an
-    /// iPad's card fades over 0.3.
-    private func leave(completion: @escaping () -> Void) {
+    /// Telegram's out: back into the "+" on glass, else down past the
+    /// screen in 0.25 s with the dim; dragged away, on a spring with the
+    /// finger's speed; an iPad's card fades over 0.3.
+    private func leave(_ how: Leaving, completion: @escaping () -> Void) {
         guard !closing else { return }
         closing = true
         settling?.stopAnimation(true)
         settling = nil
+        dropping?.stopAnimation(true)
+        dropping = nil
+        view.endEditing(true)
         view.isUserInteractionEnabled = false
         let gone = { [weak self] in
+            self?.hiddenButton?.alpha = 1
             guard let self, presentingViewController != nil else { return completion() }
             dismiss(animated: false, completion: completion)
         }
@@ -419,22 +672,76 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
             return
         }
         UIView.animate(withDuration: AttachMenuMotion.closeDuration, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
-            self.drop = self.view.bounds.height
             self.dim.alpha = 0
-            self.place()
-        } completion: { _ in gone() }
+        }
+        switch how {
+        case let .dragged(velocity):
+            // `interactivelyDismissed`: on down with damping 180, the
+            // finger's speed over the screen left under the sheet.
+            let distance = max(1, view.bounds.height - (top + drop))
+            let animator = UIViewPropertyAnimator(duration: AttachMenuMotion.settleDuration, timingParameters: AttachMenuSprings.custom(damping: AttachMenuMotion.dismissDamping, duration: AttachMenuMotion.settleDuration, velocity: max(0, velocity) / distance))
+            drop = view.bounds.height - top
+            animator.addAnimations { self.placeDrop() }
+            animator.addCompletion { _ in gone() }
+            animator.startAnimation()
+        case .closed:
+            if sheet.style == .sheet, let button = hiddenButton ?? button?(), button.window === view.window, !UIAccessibility.isReduceMotionEnabled {
+                morphOut(into: button, completion: gone)
+                return
+            }
+            UIView.animate(withDuration: AttachMenuMotion.closeDuration, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
+                self.drop = self.view.bounds.height
+                self.placeDrop()
+            } completion: { _ in gone() }
+        }
     }
 
-    @objc private func dimTapped() { close() }
+    /// `AttachmentController.animateOut`, glass: the clip shrinks back into
+    /// the "+" as the page fades off its glass and the "+" comes back on it.
+    private func morphOut(into button: UIView, completion: @escaping () -> Void) {
+        typealias M = AttachMenuMotion.Morph
+        let target = button.convert(button.bounds, to: host)
+        morphing = true
+        hiddenButton = button
+        button.alpha = 0
+        morphGlass.isHidden = false
+        morphGlass.alpha = 0
+        morphGlyph.alpha = 0
+        let center = CGPoint(x: target.midX, y: target.midY)
+        let position = UIViewPropertyAnimator(duration: M.positionDuration, timingParameters: AttachMenuSprings.custom(damping: M.positionDamping, duration: M.positionDuration, velocity: 0))
+        position.addAnimations { self.clip.center = center }
+        let size = UIViewPropertyAnimator(duration: M.outScaleDuration, timingParameters: AttachMenuSprings.custom(damping: M.outDamping, duration: M.outScaleDuration, velocity: 0))
+        size.addAnimations {
+            self.clip.bounds = CGRect(origin: .zero, size: target.size)
+            self.clip.transform = .identity
+        }
+        for animator in [position, size] { animator.startAnimation() }
+        UIView.animate(withDuration: M.cornersDuration, delay: 0, options: [.curveEaseInOut]) {
+            self.clip.cornerConfiguration = .uniformCorners(radius: .fixed(target.height / 2))
+        }
+        UIView.animate(withDuration: M.contentFadeOut, delay: 0, options: [.curveEaseInOut]) {
+            self.ground.alpha = 0
+            self.body.alpha = 0
+            self.panel.alpha = 0
+            self.morphGlass.alpha = 1
+        }
+        UIView.animate(withDuration: M.outGlyphFade, delay: 0, options: [.curveEaseInOut]) {
+            self.morphGlyph.alpha = 1
+        }
+        UIView.animate(withDuration: M.glassFade, delay: M.glassFadeDelay, options: [.curveEaseInOut]) {
+            self.morphGlass.alpha = 0
+            button.alpha = 1
+        } completion: { _ in completion() }
+    }
+
+    @objc private func dimTapped() { requestClose() }
 
     /// Pulled up to its full height, or back to rest, on Telegram's spring:
     /// what a drag that far does, for VoiceOver's scroll and for tests.
     func setExpanded(_ value: Bool) {
         guard let sheet, sheet.style == .sheet, value != expanded, value || sheet.canCollapse, !closing else { return }
-        settling?.stopAnimation(true)
-        settling = nil
         expanded = value
-        settle(to: sheet.top(expanded: value), velocity: 0, spring: true)
+        settle(to: sheet.top(expanded: value), springVelocity: 0)
     }
 
     override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
@@ -448,21 +755,26 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
     // MARK: Dragging (AttachmentContainer.panGesture)
 
     private struct Drag {
-        var startExpanded: Bool
-        /// The translation the sheet last followed; frozen while the grid scrolls.
-        var translation: CGFloat
+        var pan: AttachSheetPan
         weak var scroll: UIScrollView?
     }
 
     private var drag: Drag?
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        guard gestureRecognizer === pan else { return true }
-        return sheet?.style != .card && !closing
+        if gestureRecognizer === pan {
+            // Telegram's panel isn't in the container the drag is on, and
+            // the drag stops while the keyboard is up.
+            guard sheet?.style != .card, !closing, keyboard == 0, preview == nil else { return false }
+            return !panel.frame.contains(pan.location(in: host))
+        }
+        return true
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-        gestureRecognizer === pan && other is UIPanGestureRecognizer
+        if gestureRecognizer === pan { return other is UIPanGestureRecognizer || other is UILongPressGestureRecognizer }
+        if gestureRecognizer === picking { return other is UIPanGestureRecognizer }
+        return false
     }
 
     private func scrollView(at point: CGPoint) -> UIScrollView? {
@@ -474,90 +786,83 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
         return nil
     }
 
-    private func atTop(_ scroll: UIScrollView) -> Bool {
-        scroll.contentOffset.y <= -scroll.adjustedContentInset.top + 1
+    private func scrolled(_ scroll: UIScrollView?) -> CGFloat? {
+        scroll.map { $0.contentOffset.y + $0.adjustedContentInset.top }
     }
 
     private func pin(_ scroll: UIScrollView) {
         scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: -scroll.adjustedContentInset.top), animated: false)
     }
 
-    @objc private func panned(_ recognizer: UIPanGestureRecognizer) {
+    @objc func panned(_ recognizer: UIPanGestureRecognizer) {
         guard let sheet else { return }
         switch recognizer.state {
         case .began:
             settling?.stopAnimation(true)
             settling = nil
-            drag = Drag(startExpanded: expanded, translation: 0, scroll: scrollView(at: recognizer.location(in: view)))
+            dropping?.stopAnimation(true)
+            dropping = nil
+            drag = Drag(pan: AttachSheetPan(expanded: expanded, fullSize: !sheet.canCollapse, edge: sheet.travel), scroll: scrollView(at: recognizer.location(in: view)))
         case .changed:
             guard var current = drag else { return }
-            var translation = recognizer.translation(in: view).y
-            let base = current.startExpanded ? 0 : sheet.travel
-            if let scroll = current.scroll {
-                if atTop(scroll) {
-                    scroll.bounces = false
-                    pin(scroll)
-                } else {
-                    translation = current.translation
-                    if current.startExpanded {
-                        recognizer.setTranslation(.zero, in: view)
-                    } else if base + translation > 0 {
-                        pin(scroll)
-                    }
-                }
-                if !current.startExpanded, base + translation > 0 {
-                    scroll.panGestureRecognizer.setTranslation(.zero, in: scroll)
-                }
-            }
-            current.translation = translation
+            let step = current.pan.changed(translation: recognizer.translation(in: view).y, scrolled: scrolled(current.scroll), guarded: !picked.isEmpty)
             drag = current
-            let moved = AttachMenuMotion.drag(expanded: current.startExpanded, canCollapse: sheet.canCollapse, travel: sheet.travel, translation: translation)
-            top = sheet.expandedTop + moved.offset
-            drop = moved.drop
+            if let scroll = current.scroll {
+                if step.stopBounce { scroll.bounces = false }
+                if step.pin { pin(scroll) }
+                if step.resetScrollTranslation { scroll.panGestureRecognizer.setTranslation(.zero, in: scroll) }
+            }
+            if step.resetTranslation { recognizer.setTranslation(.zero, in: view) }
+            if step.ask {
+                // `shouldCancelPanGesture`: the pull stops and asks.
+                drag = nil
+                current.scroll?.bounces = true
+                recognizer.isEnabled = false
+                recognizer.isEnabled = true
+                expanded = current.pan.expanded
+                settle(to: sheet.top(expanded: expanded), springVelocity: nil)
+                requestClose()
+                return
+            }
+            top = sheet.expandedTop + step.inset
+            drop = step.drop
             place()
         case .ended, .cancelled, .failed:
             guard let current = drag else { return }
             drag = nil
             current.scroll?.bounces = true
             let velocity = recognizer.state == .ended ? recognizer.velocity(in: view).y : 0
-            let scrolled = current.scroll.map { $0.contentOffset.y > -$0.adjustedContentInset.top + 0.1 } ?? false
-            let outcome = recognizer.state == .ended
-                ? AttachMenuMotion.settle(expanded: current.startExpanded, canCollapse: sheet.canCollapse, travel: sheet.travel, offset: top - sheet.expandedTop, drop: drop, velocity: velocity, scrolled: scrolled)
-                : .stay
-            switch outcome {
-            case .dismiss:
-                close()
-            case .expand:
-                expanded = true
-                settle(to: sheet.expandedTop, velocity: velocity, spring: true)
-            case .collapse:
-                expanded = false
-                if let scroll = current.scroll { pin(scroll) }
-                settle(to: sheet.restTop, velocity: velocity, spring: true)
-            case .stay:
-                expanded = current.startExpanded
-                settle(to: sheet.top(expanded: expanded), velocity: 0, spring: false)
+            let end = current.pan.ended(translation: current.pan.offset, velocity: velocity, scrolled: scrolled(current.scroll), guarded: !picked.isEmpty)
+            switch end.outcome {
+            case let .dismiss(velocity):
+                let onGone = onGone
+                leave(.dragged(velocity)) { onGone?() }
+            case let .settle(to, springVelocity):
+                if end.pin, let scroll = current.scroll { pin(scroll) }
+                expanded = to
+                settle(to: sheet.top(expanded: to), springVelocity: springVelocity)
             }
         default:
             break
         }
     }
 
-    /// To `target`, the drop gone: on Telegram's spring after a flick or a
-    /// change of state, else 0.3 s ease in-out.
-    private func settle(to target: CGFloat, velocity: CGFloat, spring: Bool) {
-        let distance = target - top
+    /// To `target` on Telegram's spring with this relative velocity, or
+    /// with nil over 0.3 s ease in-out; any drop goes back over 0.3 s ease
+    /// in-out beside it.
+    private func settle(to target: CGFloat, springVelocity: CGFloat?, duration: TimeInterval? = nil) {
+        settling?.stopAnimation(true)
         let animator: UIViewPropertyAnimator
-        if spring {
-            let relative = distance == 0 ? 0 : velocity / distance
-            animator = UIViewPropertyAnimator(duration: AttachMenuMotion.settleDuration, timingParameters: AttachMenuSprings.settle(initialVelocity: relative))
+        if let duration {
+            animator = UIViewPropertyAnimator(duration: duration, timingParameters: AttachMenuSprings.openCurve())
+        } else if let springVelocity {
+            animator = UIViewPropertyAnimator(duration: AttachMenuMotion.settleDuration, timingParameters: AttachMenuSprings.settle(initialVelocity: springVelocity))
         } else {
             animator = UIViewPropertyAnimator(duration: AttachMenuMotion.returnDuration, curve: .easeInOut)
         }
         top = target
-        drop = 0
         animator.addAnimations {
-            self.place()
+            self.placeSheet()
             self.layoutBody()
         }
         animator.addCompletion { [weak self] _ in
@@ -567,6 +872,40 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
         }
         animator.isUserInteractionEnabled = true
         settling = animator
+        animator.startAnimation()
+        guard drop != 0 else { return }
+        drop = 0
+        let back = UIViewPropertyAnimator(duration: AttachMenuMotion.dropReturnDuration, curve: .easeInOut) { self.placeDrop() }
+        back.addCompletion { [weak self] _ in
+            guard let self, dropping === back else { return }
+            dropping = nil
+        }
+        back.isUserInteractionEnabled = true
+        dropping = back
+        back.startAnimation()
+    }
+
+    // MARK: Caption
+
+    /// `beganTextEditing`: the caption expands the sheet over 0.5 s.
+    private func captionFocused(_ focused: Bool) {
+        guard focused, let sheet, !expanded, sheet.canCollapse, !closing else { return }
+        expanded = true
+        settle(to: sheet.expandedTop, springVelocity: nil, duration: AttachMenuMotion.captionExpandDuration)
+    }
+
+    /// The panel rides the keyboard, with its own curve.
+    @objc private func keyboardChanged(_ note: Notification) {
+        guard let info = note.userInfo, let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue, let window = view.window else { return }
+        let frame = view.convert(window.convert(end, from: window.screen.coordinateSpace), from: window)
+        let hiding = note.name == UIResponder.keyboardWillHideNotification
+        let overlap = hiding || !panel.field.isFirstResponder ? 0 : max(0, view.bounds.maxY - frame.minY)
+        guard overlap != keyboard else { return }
+        keyboard = overlap
+        let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+        let curve = (info[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int).flatMap(UIView.AnimationCurve.init(rawValue:)) ?? .easeInOut
+        let animator = UIViewPropertyAnimator(duration: duration, curve: curve) { self.placePanel() }
+        animator.isUserInteractionEnabled = true
         animator.startAnimation()
     }
 
@@ -586,18 +925,18 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
         }
         page = next
         showTab()
-        bar.select(next.rawValue, animated: true)
+        panel.select(next.rawValue, animated: true)
         view.setNeedsLayout()
         view.layoutIfNeeded()
         guard sheet?.style == .sheet else { return }
         UIView.animate(withDuration: AttachMenuMotion.switchDipDuration, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
             self.dip = AttachMenuMotion.switchDip
-            self.place()
+            self.placeDrop()
         } completion: { _ in
             let back = UIViewPropertyAnimator(duration: AttachMenuMotion.switchReturnDuration, timingParameters: AttachMenuSprings.dipReturn())
             back.addAnimations {
                 self.dip = 0
-                self.place()
+                self.placeDrop()
             }
             back.isUserInteractionEnabled = true
             back.startAnimation()
@@ -608,67 +947,185 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDataSou
         gallery.isHidden = page != .gallery
         files.isHidden = page != .files
         titleLabel.text = page == .files ? Strings.AttachMenu.files : Strings.AttachMenu.recents
+        cameraTile.isHidden = page != .gallery || content?.grid.camera == nil
+        updateEdge(animated: false)
     }
 
     // MARK: Grid
 
-    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        access.reads ? library.count : 0
-    }
-
-    private var thumbnailPixels: CGSize {
-        let scale = view.window?.screen.scale ?? view.traitCollection.displayScale
-        let cell = gridLayout.grid?.cell ?? .zero
-        return CGSize(width: cell.width * scale, height: cell.height * scale)
-    }
-
-    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: AttachGridCell.id, for: indexPath) as! AttachGridCell
-        guard let item = library.item(at: indexPath.item) else { return cell }
-        cell.show(item, index: indexPath.item, library: library, pixels: thumbnailPixels)
-        cell.setNumber(number(item.id), animated: false)
-        cell.dimmed = cell.number == nil && picked.count >= limit
-        return cell
-    }
-
-    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        collectionView.deselectItem(at: indexPath, animated: false)
-        guard let item = library.item(at: indexPath.item) else { return }
-        toggle(item.id)
-    }
-
     private func number(_ id: String) -> Int? { picked.firstIndex(of: id).map { $0 + 1 } }
 
-    /// Picks or unpicks; the numbers after it close up.
-    func toggle(_ id: String) {
-        if let index = picked.firstIndex(of: id) {
-            picked.remove(at: index)
-        } else {
-            guard picked.count < limit else { return }
+    /// The circle on picture `index`: picks it or not; past the limit, the
+    /// error buzz (`CheckNode`).
+    private func check(_ index: Int) {
+        guard let item = library.item(at: index) else { return }
+        if !toggle(item.id) { UINotificationFeedbackGenerator().notificationOccurred(.error) }
+    }
+
+    /// Picks or unpicks; the numbers after it close up. False at the limit.
+    @discardableResult
+    func toggle(_ id: String) -> Bool {
+        setPicked(id, picked.firstIndex(of: id) == nil)
+    }
+
+    @discardableResult
+    func setPicked(_ id: String, _ value: Bool) -> Bool {
+        let index = picked.firstIndex(of: id)
+        if value {
+            guard index == nil else { return true }
+            guard picked.count < limit else { return false }
             picked.append(id)
+        } else {
+            guard let index else { return true }
+            picked.remove(at: index)
         }
-        haptic.selectionChanged()
-        let full = picked.count >= limit
-        for cell in grid.visibleCells.compactMap({ $0 as? AttachGridCell }) {
-            guard let cellID = cell.itemID else { continue }
-            let next = number(cellID)
-            cell.setNumber(next, animated: cellID == id)
-            cell.dimmed = next == nil && full
-        }
-        bar.setCount(picked.count, animated: true)
+        feed.refreshNumbers(animating: id)
+        updateCount(animated: true)
+        preview?.showSelection(animated: true)
+        return true
+    }
+
+    /// The drag-select's view of the grid: the picture under a point.
+    fileprivate func pickable(at point: CGPoint) -> (index: Int, picked: Bool)? {
+        guard let index = feed.index(at: point), let item = library.item(at: index) else { return nil }
+        return (index, picked.contains(item.id))
+    }
+
+    fileprivate func setPicked(at index: Int, _ value: Bool) {
+        guard let item = library.item(at: index) else { return }
+        if !setPicked(item.id, value) { UINotificationFeedbackGenerator().notificationOccurred(.error) }
+    }
+
+    /// The drag-select took the finger: the grid stops and the sheet lets go.
+    fileprivate func pickingBegan() {
+        grid.isScrollEnabled = false
+        pan.isEnabled = false
+        pan.isEnabled = true
+    }
+
+    fileprivate func pickingEnded() {
+        grid.isScrollEnabled = true
+    }
+
+    /// Telegram's preview over the grid, from the tapped picture.
+    private func open(_ index: Int) {
+        guard preview == nil, !closing, presentedViewController == nil else { return }
+        view.endEditing(true)
+        let preview = AttachPreviewViewController(
+            library: library, start: index,
+            selectionNumber: { [weak self] id in self?.number(id) },
+            toggle: { [weak self] id in self?.toggle(id) ?? false },
+            sourceView: { [weak self] index in self?.cell(index) }
+        )
+        preview.onHide = { [weak self] id in self?.feed.hidden = id }
+        preview.onFocus = { [weak self] index in self?.reveal(index) }
+        self.preview = preview
+        present(preview, animated: true)
+    }
+
+    private func cell(_ index: Int) -> UIView? {
+        grid.cellForItem(at: IndexPath(item: index, section: 0))
+    }
+
+    /// Keeps the preview's picture in the grid's view, for its way back.
+    private func reveal(_ index: Int) {
+        guard index < feed.count, let frame = gridLayout.grid?.frame(at: index) else { return }
+        let visible = grid.bounds.inset(by: grid.adjustedContentInset)
+        guard !visible.contains(frame) else { return }
+        let y = frame.minY < visible.minY ? frame.minY - grid.adjustedContentInset.top : frame.maxY - grid.bounds.height + grid.adjustedContentInset.bottom
+        let maxY = max(-grid.adjustedContentInset.top, grid.contentSize.height - grid.bounds.height + grid.adjustedContentInset.bottom)
+        grid.setContentOffset(CGPoint(x: 0, y: min(max(y, -grid.adjustedContentInset.top), maxY)), animated: false)
+        grid.layoutIfNeeded()
+    }
+
+    private func sendPicked() {
+        guard !picked.isEmpty else { return }
+        finish(.send(picked, caption: panel.caption))
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard scrollView === grid else { return }
-        prepareThumbnails()
+        feed.scrolled()
+        updateEdge(animated: true)
+    }
+}
+
+/// Telegram's drag across the grid to pick (`MediaPickerGridSelectionGesture`),
+/// run by `AttachSelectionDrag`: it takes the finger from the grid and the
+/// sheet once it goes sideways, and picks what it passes over.
+final class AttachSelectionRecognizer: UIGestureRecognizer {
+    weak var sheet: AttachSheetViewController?
+    private var drag: AttachSelectionDrag?
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard touches.count == 1, drag == nil, let touch = touches.first else {
+            if state == .possible { state = .failed }
+            return
+        }
+        touched(at: touch.location(in: view))
     }
 
-    /// Thumbnails a screen ahead and behind are made before they show.
-    private func prepareThumbnails() {
-        guard access.reads, let layout = gridLayout.grid, view.window != nil else { return }
-        let bounds = grid.bounds
-        library.prepare(layout.visible(minY: bounds.minY - bounds.height, maxY: bounds.maxY + bounds.height), pixels: thumbnailPixels)
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        guard let touch = touches.first else { return }
+        moved(to: touch.location(in: view))
     }
+
+    /// The finger down, in the grid's space.
+    func touched(at location: CGPoint) {
+        drag = AttachSelectionDrag(start: location)
+        if drag?.phase == .failed { state = .failed }
+    }
+
+    /// The finger moved, in the grid's space.
+    func moved(to location: CGPoint) {
+        guard var drag, let sheet else { return }
+        let event = drag.moved(to: location, item: { sheet.pickable(at: $0) }, set: { sheet.setPicked(at: $0, $1) })
+        self.drag = drag
+        switch event {
+        case .failed:
+            if state == .possible { state = .failed }
+        case .began:
+            sheet.pickingBegan()
+            state = .began
+        case .none:
+            if state == .began || state == .changed { state = .changed }
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        state = state == .began || state == .changed ? .ended : .failed
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        state = state == .began || state == .changed ? .cancelled : .failed
+    }
+
+    override func reset() {
+        super.reset()
+        if drag.map({ if case .picking = $0.phase { true } else { false } }) == true { sheet?.pickingEnded() }
+        drag = nil
+    }
+}
+
+/// The fade under the glass header over a scrolled grid: black 0.45 to
+/// clear, 80 tall.
+final class AttachMenuTopEdge: UIView {
+    override class var layerClass: AnyClass { CAGradientLayer.self }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        let gradient = layer as! CAGradientLayer
+        gradient.colors = [UIColor(Palette.attachMenuTopEdge).cgColor, UIColor(Palette.attachMenuTopEdge).withAlphaComponent(0).cgColor]
+        gradient.startPoint = CGPoint(x: 0.5, y: 0)
+        gradient.endPoint = CGPoint(x: 0.5, y: 1)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 }
 
 /// Telegram's springs as UIKit's, sped up to their durations as Display
@@ -679,8 +1136,20 @@ enum AttachMenuSprings {
         spring(mass: AttachMenuMotion.springMass, stiffness: AttachMenuMotion.springStiffness, damping: AttachMenuMotion.springDamping, duration: AttachMenuMotion.settleDuration, velocity: initialVelocity)
     }
 
+    /// Display's `.customSpring(damping:initialVelocity:)`: mass 5,
+    /// stiffness 900, sped up to `duration`.
+    static func custom(damping: CGFloat, duration: TimeInterval, velocity: CGFloat) -> UISpringTimingParameters {
+        spring(mass: AttachMenuMotion.springMass, stiffness: AttachMenuMotion.springStiffness, damping: damping, duration: duration, velocity: velocity)
+    }
+
     static func dipReturn() -> UISpringTimingParameters {
         spring(mass: 1, stiffness: 900, damping: AttachMenuMotion.switchReturnDamping, duration: AttachMenuMotion.switchReturnDuration, velocity: 0)
+    }
+
+    /// Display's `.spring` curve.
+    static func openCurve() -> UICubicTimingParameters {
+        let curve = AttachMenuMotion.openCurve
+        return UICubicTimingParameters(controlPoint1: CGPoint(x: CGFloat(curve.x1), y: CGFloat(curve.y1)), controlPoint2: CGPoint(x: CGFloat(curve.x2), y: CGFloat(curve.y2)))
     }
 
     /// A spring settling in `duration`: time scaled by f takes damping
@@ -692,305 +1161,6 @@ enum AttachMenuSprings {
         probe.damping = damping
         let factor = duration > 0 ? CGFloat(probe.settlingDuration / duration) : 1
         return UISpringTimingParameters(mass: mass, stiffness: stiffness * factor * factor, damping: damping * factor, initialVelocity: CGVector(dx: 0, dy: velocity * factor))
-    }
-}
-
-/// The grid's frames, straight from `AttachMenuGridLayout`.
-final class AttachGridCollectionLayout: UICollectionViewLayout {
-    var grid: AttachMenuGridLayout? {
-        didSet { if grid != oldValue { invalidateLayout() } }
-    }
-
-    override var collectionViewContentSize: CGSize {
-        CGSize(width: collectionView?.bounds.width ?? 0, height: grid?.contentHeight ?? 0)
-    }
-
-    override func layoutAttributesForElements(in rect: CGRect) -> [UICollectionViewLayoutAttributes]? {
-        guard let grid, let count = collectionView?.numberOfItems(inSection: 0) else { return nil }
-        return grid.visible(minY: rect.minY, maxY: rect.maxY).filter { $0 < count }.map { attributes(grid, $0) }
-    }
-
-    override func layoutAttributesForItem(at indexPath: IndexPath) -> UICollectionViewLayoutAttributes? {
-        guard let grid else { return nil }
-        return attributes(grid, indexPath.item)
-    }
-
-    private func attributes(_ grid: AttachMenuGridLayout, _ index: Int) -> UICollectionViewLayoutAttributes {
-        let attributes = UICollectionViewLayoutAttributes(forCellWith: IndexPath(item: index, section: 0))
-        attributes.frame = grid.frame(at: index)
-        return attributes
-    }
-
-    override func shouldInvalidateLayout(forBoundsChange newBounds: CGRect) -> Bool { false }
-}
-
-/// One picture of the grid: the thumbnail filling the square, the number
-/// circle at its top right and a video's length at its bottom right.
-final class AttachGridCell: UICollectionViewCell {
-    static let id = "attach-cell"
-    private let picture = UIImageView()
-    private let check = LibraryCheckView()
-    private let duration = UILabel()
-    private weak var library: AttachLibrary?
-    private var request: Int?
-    private(set) var itemID: String?
-    private var length: String?
-    var number: Int? { check.number }
-    /// Nothing more can be picked: an unpicked picture fades.
-    var dimmed = false { didSet { picture.alpha = dimmed ? 0.5 : 1 } }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        contentView.backgroundColor = UIColor(Palette.libraryPlaceholder)
-        picture.contentMode = .scaleAspectFill
-        picture.clipsToBounds = true
-        contentView.addSubview(picture)
-        duration.font = .systemFont(ofSize: 11, weight: .semibold)
-        duration.textColor = .white
-        duration.layer.shadowColor = UIColor.black.cgColor
-        duration.layer.shadowOpacity = 0.4
-        duration.layer.shadowRadius = 2
-        duration.layer.shadowOffset = .zero
-        contentView.addSubview(duration)
-        contentView.addSubview(check)
-        isAccessibilityElement = true
-        accessibilityTraits = .button
-    }
-
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-
-    func show(_ item: AttachLibraryItem, index: Int, library: AttachLibrary, pixels: CGSize) {
-        if let request { self.library?.cancelThumbnail(request) }
-        self.library = library
-        itemID = item.id
-        accessibilityIdentifier = "attach-photo:\(index)"
-        length = item.duration.map { LibraryPickerLayout.duration(seconds: $0) }
-        duration.text = length
-        duration.isHidden = length == nil
-        picture.image = nil
-        let id = item.id
-        request = library.thumbnail(at: index, pixels: pixels) { [weak self] image in
-            guard let self, itemID == id else { return }
-            picture.image = image
-        }
-        setNeedsLayout()
-    }
-
-    func setNumber(_ number: Int?, animated: Bool) {
-        check.set(number, animated: animated)
-        accessibilityLabel = length.map { Strings.Library.video($0, index: number) } ?? Strings.Library.photo(number)
-        accessibilityValue = number.map(String.init)
-        if number != nil { accessibilityTraits.insert(.selected) } else { accessibilityTraits.remove(.selected) }
-    }
-
-    override func prepareForReuse() {
-        super.prepareForReuse()
-        if let request { library?.cancelThumbnail(request) }
-        request = nil
-        itemID = nil
-        picture.image = nil
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        picture.frame = contentView.bounds
-        check.frame = LibraryPickerLayout.check(in: bounds.size)
-        duration.frame = LibraryPickerLayout.duration(duration.intrinsicContentSize, in: bounds.size)
-    }
-}
-
-/// The camera's cell, two pictures tall: black, with the camera's glyph.
-final class AttachCameraTile: UIControl {
-    private let icon = IconView(.ionicons("camera"), size: AttachMenuMetrics.cameraIcon, tint: Palette.attachMenuCameraGlyph)
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = UIColor(Palette.attachMenuCamera)
-        icon.isUserInteractionEnabled = false
-        addSubview(icon)
-        isAccessibilityElement = true
-        accessibilityTraits = .button
-        accessibilityIdentifier = "attach-camera"
-        accessibilityLabel = Strings.AttachMenu.camera
-        accessibilityHint = Strings.AttachMenu.cameraHint
-    }
-
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-
-    override var isHighlighted: Bool {
-        didSet { icon.alpha = isHighlighted ? 0.5 : 1 }
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        // IconView centres its glyph in what it is given.
-        icon.frame = bounds
-    }
-}
-
-/// Telegram's glass tab bar (`AttachmentPanel`, glass): a capsule of tabs
-/// with a pill behind the chosen one, which turns into "Add N" while
-/// anything is picked.
-final class AttachMenuBar: UIView {
-    var titles: [String] = [] { didSet { rebuild() } }
-    var icons: [Icon] = [] { didSet { rebuild() } }
-    var ids: [String] = [] { didSet { rebuild() } }
-    var onTab: ((Int) -> Void)?
-    var onAdd: (() -> Void)?
-    private(set) var selected = 0
-    private(set) var count = 0
-    private let glass: UIVisualEffectView = {
-        let effect = UIGlassEffect(style: .regular)
-        effect.isInteractive = true
-        return UIVisualEffectView(effect: effect)
-    }()
-    private let pill = UIView()
-    private var tabs: [AttachMenuTabControl] = []
-    private let add = UIButton(type: .custom)
-    private let addLabel = UILabel()
-    private var placed: (minX: CGFloat, width: CGFloat, bottom: CGFloat, pixel: CGFloat)?
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        glass.cornerConfiguration = .capsule()
-        addSubview(glass)
-        pill.backgroundColor = UIColor(Palette.attachMenuTabPill)
-        pill.isUserInteractionEnabled = false
-        glass.contentView.addSubview(pill)
-        addLabel.font = .systemFont(ofSize: 17, weight: .semibold)
-        addLabel.textColor = .white
-        addLabel.textAlignment = .center
-        addLabel.isUserInteractionEnabled = false
-        add.addSubview(addLabel)
-        add.alpha = 0
-        add.isHidden = true
-        add.accessibilityIdentifier = "attach-add"
-        add.addAction(UIAction { [weak self] _ in self?.onAdd?() }, for: .touchUpInside)
-        glass.contentView.addSubview(add)
-    }
-
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-
-    private func rebuild() {
-        tabs.forEach { $0.removeFromSuperview() }
-        tabs = titles.enumerated().map { index, title in
-            let tab = AttachMenuTabControl(title: title, icon: icons.indices.contains(index) ? icons[index] : nil)
-            tab.accessibilityIdentifier = ids.indices.contains(index) ? ids[index] : nil
-            tab.addAction(UIAction { [weak self] _ in
-                guard let self else { return }
-                select(index, animated: true)
-                onTab?(index)
-            }, for: .touchUpInside)
-            glass.contentView.addSubview(tab)
-            return tab
-        }
-        select(selected, animated: false)
-    }
-
-    func select(_ index: Int, animated: Bool) {
-        selected = index
-        for (offset, tab) in tabs.enumerated() { tab.chosen = offset == index }
-        relayout(animated: animated)
-    }
-
-    func setCount(_ count: Int, animated: Bool) {
-        let was = self.count
-        self.count = count
-        if count > 0 { addLabel.text = Strings.AttachMenu.add(count) }
-        add.accessibilityLabel = addLabel.text
-        guard (was > 0) != (count > 0) else { return relayout(animated: false) }
-        if count > 0 { add.isHidden = false }
-        let picking = count > 0
-        let effect = UIGlassEffect(style: .regular)
-        effect.isInteractive = true
-        if picking { effect.tintColor = UIColor(Palette.libraryCheckFill) }
-        let changes = {
-            self.glass.effect = effect
-            self.add.alpha = picking ? 1 : 0
-            self.pill.alpha = picking ? 0 : 1
-            for tab in self.tabs { tab.alpha = picking ? 0 : 1 }
-            self.relayout(animated: false)
-        }
-        let done = { (_: Bool) in
-            if self.count == 0 { self.add.isHidden = true }
-            for tab in self.tabs { tab.isHidden = self.count > 0 }
-        }
-        for tab in tabs { tab.isHidden = false }
-        guard animated else { changes(); return done(true) }
-        UIView.animate(withDuration: AttachMenuMotion.barDuration, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: changes, completion: done)
-    }
-
-    func place(minX: CGFloat, width: CGFloat, bottom: CGFloat, pixel: CGFloat) {
-        placed = (minX, width, bottom, pixel)
-        relayout(animated: false)
-    }
-
-    private func relayout(animated: Bool) {
-        guard let placed else { return }
-        let fits = CGSize(width: CGFloat.greatestFiniteMagnitude, height: 40)
-        let layout = AttachMenuBarLayout(
-            minX: placed.minX, width: placed.width, bottom: placed.bottom,
-            titles: tabs.map(\.titleSize), selected: selected, picking: count > 0,
-            addTitle: addLabel.sizeThatFits(fits), pixel: placed.pixel
-        )
-        let apply = {
-            self.frame = layout.capsule
-            self.glass.frame = self.bounds
-            self.pill.frame = layout.selection
-            self.pill.layer.cornerRadius = layout.selection.height / 2
-            for (tab, frame) in zip(self.tabs, layout.tabs) { tab.place(frame) }
-            self.add.frame = self.bounds
-            self.addLabel.frame = layout.add
-        }
-        guard animated else { return apply() }
-        let curve = AttachMenuMotion.openCurve
-        UIViewPropertyAnimator(duration: AttachMenuMotion.barDuration, controlPoint1: CGPoint(x: CGFloat(curve.x1), y: CGFloat(curve.y1)), controlPoint2: CGPoint(x: CGFloat(curve.x2), y: CGFloat(curve.y2)), animations: apply).startAnimation()
-    }
-}
-
-/// One tab: its glyph over its name, accent when chosen.
-final class AttachMenuTabControl: UIControl {
-    private let icon: IconView
-    private let label = UILabel()
-    var chosen = false {
-        didSet {
-            icon.tintColor = UIColor(chosen ? Palette.attachMenuTabSelected : Palette.attachMenuTab)
-            label.textColor = UIColor(chosen ? Palette.attachMenuTabSelected : Palette.attachMenuTab)
-            accessibilityTraits = chosen ? [.button, .selected] : .button
-        }
-    }
-
-    init(title: String, icon: Icon?) {
-        self.icon = IconView(icon, size: AttachMenuMetrics.tabIcon, tint: Palette.attachMenuTab)
-        super.init(frame: .zero)
-        self.icon.isUserInteractionEnabled = false
-        label.text = title
-        label.font = .systemFont(ofSize: 10, weight: .medium)
-        label.textColor = UIColor(Palette.attachMenuTab)
-        label.textAlignment = .center
-        addSubview(self.icon)
-        addSubview(label)
-        isAccessibilityElement = true
-        accessibilityLabel = title
-        accessibilityTraits = .button
-        showsLargeContentViewer = true
-        largeContentTitle = title
-        addInteraction(UILargeContentViewerInteraction())
-    }
-
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-
-    var titleSize: CGSize { label.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: 20)) }
-
-    override var isHighlighted: Bool {
-        didSet { alpha = isHighlighted ? 0.6 : 1 }
-    }
-
-    /// Placed by the bar's layout, its parts in its own space.
-    func place(_ tab: AttachMenuBarLayout.Tab) {
-        frame = tab.frame
-        icon.frame = tab.icon.offsetBy(dx: -tab.frame.minX, dy: -tab.frame.minY)
-        label.frame = tab.title.offsetBy(dx: -tab.frame.minX, dy: -tab.frame.minY)
     }
 }
 

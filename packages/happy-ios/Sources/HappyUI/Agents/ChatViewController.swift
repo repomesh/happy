@@ -38,9 +38,6 @@ final class ChatViewController: UIViewController, ComposeHosting {
     var focusesOnOpen = true
     /// Opened on the "+" sheet: the first thing added brings the keyboard up, once.
     var focusesAfterPick = false
-    /// The keyboard was up as the "+" sheet opened: it comes back once the
-    /// sheet, and whatever was chosen on it, is done.
-    private var keyboardOwed = false
     /// The keyboard new work opens with, not yet asked for.
     private var focusPending = false
     /// The ask a screen opened this conversation with (Settings' rename
@@ -768,8 +765,19 @@ final class ChatViewController: UIViewController, ComposeHosting {
     }
     /// A pick made here, until the conversation's own mode says it back.
     private var picked: AgentWire.Mode?
-    /// The "+" menu while it is up.
-    private weak var attachSheet: AttachSheetViewController?
+    /// The "+" menu and what it opens, as the legacy chat's composer has them.
+    private lazy var attach: AttachMenuPresenter = {
+        let presenter = AttachMenuPresenter(pictures: pictures, composer: .init(
+            textView: { [weak self] in self?.card.textView },
+            focus: { [weak self] in self?.card.focus() },
+            addControl: { [weak self] in self?.card.addControl },
+            text: { [weak self] in self?.card.text ?? "" },
+            setText: { [weak self] text in self?.card.setText(text, selection: NSRange(location: (text as NSString).length, length: 0)) },
+            send: { [weak self] in self?.send() }
+        ))
+        presenter.onSettled = { [weak self] added, keyboardWasUp in self?.settleFocus(added: added, keyboardWasUp: keyboardWasUp) }
+        return presenter
+    }()
     /// The model or effort list while it is open.
     private var picker: PickerPresenter?
     /// The permission modes for the detail over this screen, a pick going
@@ -800,37 +808,9 @@ final class ChatViewController: UIViewController, ComposeHosting {
     /// waits in the composer stay. What it adds waits in the composer,
     /// which then takes the keyboard, as does closing it with nothing.
     func presentAttach(from host: UIViewController) {
-        guard attachSheet == nil else { return }
-        let sheet = AttachSheetViewController(limit: ComposerAttachmentRules.remaining(selected: pictures.images.count))
+        guard attach.sheet == nil else { return }
         if session.models.catalog == nil { session.models.load() }
-        let library = sheet.library
-        sheet.onAction = { [weak self] action in
-            guard let self else { return }
-            switch action {
-            case .photos: presentSystemPhotos()
-            case .camera: presentCamera()
-            case .add(let ids): add(ids, from: library)
-            case .files: presentFiles()
-            }
-        }
-        sheet.onGone = { [weak self] in self?.settleFocus(added: false) }
-        sheet.source = { [weak self, weak sheet] in
-            guard let self, let sheet, sheet.isViewLoaded else { return nil }
-            return card.addControl.convert(card.addControl.bounds, to: sheet.view)
-        }
-        keyboardOwed = keyboardOwed || card.textView.isFirstResponder
-        attachSheet = sheet
-        let show = { [weak host, weak self] in
-            guard let host, let self, attachSheet === sheet else { return }
-            card.textView.resignFirstResponder()
-            host.present(sheet, animated: false)
-        }
-        // New work opens it as its screen comes in: once that screen is in.
-        if let transition = host.transitionCoordinator {
-            transition.animate(alongsideTransition: nil) { _ in show() }
-        } else {
-            show()
-        }
+        attach.present(from: host)
     }
 
     /// The mode the next message runs with, by its name.
@@ -838,74 +818,11 @@ final class ChatViewController: UIViewController, ComposeHosting {
         Strings.permissionName(mode?.permissionMode ?? session.models.catalog?.defaultPermissionMode ?? "auto")
     }
 
-    /// Photos and videos in the system's picker, which runs outside the app
-    /// and needs no access: the way in when the library is refused, and
-    /// the Files tab's "Select Photos or Videos".
-    private func presentSystemPhotos() {
-        let room = pictures.room()
-        guard room > 0 else { return settleFocus(added: false) }
-        let options = LibraryPicker.Options(limit: room)
-        LibrarySystemPicker.present(from: self, options: options) { [weak self] picks in
-            guard let self else { return LibraryPicker.discard(picks) }
-            take(picks)
-        }.onCancel = { [weak self] in self?.settleFocus(added: false) }
-    }
-
-    /// Photos and videos picked in the menu's grid, read in full.
-    private func add(_ ids: [String], from library: AttachLibrary) {
-        Task { [weak self] in
-            let picks = await library.read(ids)
-            guard let self else { return LibraryPicker.discard(picks) }
-            take(picks)
-        }
-    }
-
-    /// A photo or a video, as Telegram's camera takes either.
-    private func presentCamera() {
-        guard UIImagePickerController.isSourceTypeAvailable(.camera), pictures.room() > 0 else { return settleFocus(added: false) }
-        let camera = UIImagePickerController()
-        camera.sourceType = .camera
-        let available = UIImagePickerController.availableMediaTypes(for: .camera) ?? []
-        camera.mediaTypes = [UTType.image.identifier, UTType.movie.identifier].filter(available.contains)
-        camera.videoQuality = .typeHigh
-        camera.delegate = self
-        present(camera, animated: true)
-    }
-
-    private func presentFiles() {
-        guard pictures.room() > 0 else { return settleFocus(added: false) }
-        let files = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
-        files.allowsMultipleSelection = true
-        files.delegate = self
-        present(files, animated: true)
-    }
-
-    /// Preserve the library's order and copy every file before its temporary
-    /// representation is discarded. Direct uploads accept videos and documents.
-    private func take(_ picks: [LibraryPick]) {
-        let before = pictures.images.count
-        Task {
-            for pick in picks {
-                switch pick.media {
-                case .image(let data, _): await pictures.add(picture: data)
-                case .video(let url):
-                    let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "video/mp4"
-                    await pictures.add(file: url, name: url.lastPathComponent, mimeType: mime)
-                case .file(let url, let type):
-                    await pictures.add(file: url, name: url.lastPathComponent, mimeType: type.preferredMIMEType ?? "application/octet-stream")
-                }
-            }
-            LibraryPicker.discard(picks)
-            settleFocus(added: pictures.images.count > before)
-        }
-    }
-
     /// What the "+" sheet started is over: the keyboard comes up if it was
     /// up before, or, for new work opened on the sheet, once something is
     /// in it. Either way it is owed no longer.
-    private func settleFocus(added: Bool) {
-        let focuses = keyboardOwed || (added && focusesAfterPick)
-        keyboardOwed = false
+    private func settleFocus(added: Bool, keyboardWasUp: Bool) {
+        let focuses = keyboardWasUp || (added && focusesAfterPick)
         focusesAfterPick = false
         guard focuses, view.window != nil else { return }
         card.focus()
@@ -1916,47 +1833,6 @@ extension ChatViewController: AgentInputCardDelegate {
     func agentInputCardDidPressStop(_ card: AgentInputCardView) {
         let conversation = conversation
         Task { await conversation.abort() }
-    }
-}
-
-extension ChatViewController: UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIDocumentPickerDelegate {
-    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-        picker.dismiss(animated: true)
-        // A recording: the camera's file is moved in as Files' are.
-        if let movie = info[.mediaURL] as? URL {
-            Task { [weak self] in
-                let pick = await Task.detached(priority: .userInitiated) { LibraryPicker.document(movie, videos: true) }.value
-                guard let self else { return LibraryPicker.discard(pick.map { [$0] } ?? []) }
-                guard let pick else { return settleFocus(added: false) }
-                take([pick])
-            }
-            return
-        }
-        let image = info[.originalImage] as? UIImage
-        guard let data = image?.jpegData(compressionQuality: 0.9) else { return settleFocus(added: false) }
-        pictures.add(pictures: [data])
-        settleFocus(added: true)
-    }
-
-    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-        picker.dismiss(animated: true)
-        settleFocus(added: false)
-    }
-
-    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        settleFocus(added: false)
-    }
-
-    /// Files' copies, pictures among them read as pictures, off the main thread.
-    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        let room = max(1, ComposerAttachmentRules.remaining(selected: pictures.images.count))
-        for extra in urls.dropFirst(room) { try? FileManager.default.removeItem(at: extra) }
-        let urls = Array(urls.prefix(room))
-        Task { [weak self] in
-            let picks = await Task.detached(priority: .userInitiated) { urls.compactMap { LibraryPicker.document($0, videos: true) } }.value
-            guard let self else { return LibraryPicker.discard(picks) }
-            take(picks)
-        }
     }
 }
 

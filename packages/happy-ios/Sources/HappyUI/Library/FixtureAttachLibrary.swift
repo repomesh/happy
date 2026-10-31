@@ -15,14 +15,24 @@ final class FixtureAttachLibrary: AttachLibrary {
     private(set) var access: AttachLibraryAccess
     /// What asking answers, when access isn't settled yet.
     var grant: AttachLibraryAccess
+    /// What the grid shows, and what waits to be committed.
     private var items: [AttachLibraryItem] = []
+    private var pending: (items: [AttachLibraryItem], change: AttachLibraryChange)?
+    private var loadedOnce = false
     private let total: Int
     private var next = 0
+    private var made = 0
     private var requests: Set<Int> = []
-    /// Thumbnails drawn in the background, by index and pixel width.
-    private var drawn: [String: UIImage] = [:]
+    /// Thumbnails drawn in the background, by picture and pixel width; a
+    /// few hundred, as PhotoKit's cache would keep.
+    private let drawn: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 400
+        return cache
+    }()
     private(set) var limitedManaged = 0
-    private static let queue = DispatchQueue(label: "engineering.happy.fixture-library", qos: .userInitiated)
+    private(set) var commits = 0
+    private static let queue = DispatchQueue(label: "engineering.happy.fixture-library", qos: .userInitiated, attributes: .concurrent)
 
     init(access: AttachLibraryAccess, grant: AttachLibraryAccess = .authorized, count: Int = 60) {
         self.access = access
@@ -53,12 +63,57 @@ final class FixtureAttachLibrary: AttachLibrary {
         }
     }
 
+    private static func item(_ index: Int) -> AttachLibraryItem {
+        AttachLibraryItem(id: "fixture-\(index)", duration: index % 4 == 1 ? TimeInterval(7 + index * 13) : nil)
+    }
+
     func load(_ done: @escaping @MainActor () -> Void) {
         let size = access == .limited ? min(total, 7) : total
-        items = access.reads ? (0..<size).map { index in
-            AttachLibraryItem(id: "fixture-\(index)", duration: index % 4 == 1 ? TimeInterval(7 + index * 13) : nil)
-        } : []
+        let fetched = access.reads ? (0..<size).map(Self.item) : []
+        made = max(made, size)
+        if loadedOnce {
+            wait(fetched, .reload(from: items.count, to: fetched.count))
+        } else {
+            loadedOnce = true
+            items = fetched
+        }
         Task { @MainActor in done() }
+    }
+
+    func commit() -> AttachLibraryChange {
+        guard let pending else { return .none }
+        self.pending = nil
+        items = pending.items
+        commits += 1
+        return pending.change
+    }
+
+    private func wait(_ next: [AttachLibraryItem], _ change: AttachLibraryChange) {
+        let base = items.count
+        if pending != nil {
+            pending = (next, .reload(from: base, to: next.count))
+        } else {
+            pending = (next, change)
+        }
+        onChange?()
+    }
+
+    /// New pictures arrive at the top, as a camera roll's do: what a
+    /// library that changes under a scrolling grid sends.
+    func arrive(_ count: Int) {
+        let base = pending?.items ?? items
+        let fresh = (0..<count).map { offset in Self.item(made + offset) }
+        made += count
+        let next = fresh.reversed() + base
+        wait(next, .update(removed: [], inserted: Array(0..<count), changed: [], moves: []))
+    }
+
+    /// The pictures at `indexes` go, as if deleted in Photos.
+    func remove(_ indexes: [Int]) {
+        let base = pending?.items ?? items
+        let gone = Set(indexes)
+        let next = base.enumerated().filter { !gone.contains($0.offset) }.map(\.element)
+        wait(next, .update(removed: indexes.sorted(), inserted: [], changed: [], moves: []))
     }
 
     var count: Int { items.count }
@@ -67,10 +122,12 @@ final class FixtureAttachLibrary: AttachLibrary {
         items.indices.contains(index) ? items[index] : nil
     }
 
+    func contains(_ id: String) -> Bool { items.contains { $0.id == id } }
+
     func thumbnail(at index: Int, pixels size: CGSize, _ deliver: @escaping @MainActor (UIImage) -> Void) -> Int? {
-        guard items.indices.contains(index) else { return nil }
-        let key = "\(index)@\(Int(size.width))"
-        if let image = drawn[key] {
+        guard items.indices.contains(index), let picture = Int(items[index].id.dropFirst("fixture-".count)) else { return nil }
+        let key = "\(picture)@\(Int(size.width))"
+        if let image = drawn.object(forKey: key as NSString) {
             deliver(image)
             return nil
         }
@@ -78,11 +135,12 @@ final class FixtureAttachLibrary: AttachLibrary {
         let token = next
         requests.insert(token)
         Self.queue.async {
-            let image = Self.picture(index, pixels: size)
+            let made = Self.picture(picture, pixels: size)
+            let image = made.preparingForDisplay() ?? made
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { [weak self] in
                     guard let self else { return }
-                    drawn[key] = image
+                    drawn.setObject(image, forKey: key as NSString)
                     guard requests.remove(token) != nil else { return }
                     deliver(image)
                 }

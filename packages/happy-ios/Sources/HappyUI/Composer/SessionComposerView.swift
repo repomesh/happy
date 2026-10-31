@@ -116,6 +116,19 @@ final class SessionComposerView: UIView, ChatComposerView, AgentInputCardDelegat
     /// Picked images wait here until the outbox has its own copies.
     private let staging: ComposerAttachmentStaging
     private let images: ComposerImagePicker
+    /// The "+" menu and what it opens, as the agent chat has them.
+    private lazy var attach = AttachMenuPresenter(pictures: images, composer: .init(
+        textView: { [weak self] in self?.card.textView },
+        focus: { [weak self] in self?.card.focus() },
+        addControl: { [weak self] in self?.card.addControl },
+        text: { [weak self] in self?.card.text ?? "" },
+        setText: { [weak self] text in
+            guard let self else { return }
+            card.setText(text, selection: NSRange(location: (text as NSString).length, length: 0))
+            agentInputCardDidChangeText(card)
+        },
+        send: { [weak self] in self?.sendPressed() }
+    ))
 
     /// useActiveSuggestions: the last list and its highlighted row, kept
     /// while the query moves, shown only while there is a query.
@@ -752,8 +765,10 @@ final class SessionComposerView: UIView, ChatComposerView, AgentInputCardDelegat
         abort()
     }
 
+    /// Telegram's attachment menu, as the agent chat's "+" opens it.
     func agentInputCardDidPressAdd(_ card: AgentInputCardView) {
-        images.attach()
+        guard SessionComposerRules.canUseAttachments(state?.session.record), let host = hostViewController else { return }
+        attach.present(from: host)
     }
 
     func agentInputCard(_ card: AgentInputCardView, didRemoveAttachment id: String) {

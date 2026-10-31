@@ -97,7 +97,7 @@ enum ChatRowRenderer {
                 return userText(user, delivery: input.delivery, status: status, diagrams: diagrams, width: width, style: input.style)
             case .agentText(let agent): return agentText(agent, copied: input.copied, diagrams: diagrams, width: width, style: input.style)
             case .toolCall(let call):
-                let views = ChatToolViews(question: input.question, diffExpanded: input.diffExpanded, diagrams: diagrams)
+                let views = ChatToolViews(question: input.question, diffExpanded: input.diffExpanded, diagrams: diagrams, delivery: input.delivery)
                 return toolCall(call, expanded: input.expanded, busy: input.permissionBusy, views: views, width: width, style: input.style)
             case .agentEvent(let event): return agentEvent(event, width: width, style: input.style)
             case .unsupported(let unsupported): return unsupportedRow(unsupported, width: width, style: input.style)

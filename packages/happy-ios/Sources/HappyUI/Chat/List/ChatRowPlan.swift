@@ -157,6 +157,11 @@ struct ChatUpload: Equatable, Sendable {
 struct ChatAttachment: Equatable, Sendable {
     var ref: String
     var thumbhash: String?
+    /// Still in this device's outbox: its `localId`, whose copy is drawn
+    /// rather than downloaded.
+    var local: String? = nil
+    /// Still going to the server: its ring.
+    var upload: ChatUpload? = nil
 }
 
 /// What a tap on part of a row does.
@@ -172,7 +177,8 @@ enum ChatRowAction: Equatable, Sendable {
     case openFile(String)
     case option(String)
     case retry(localId: String)
-    /// A sending picture's cross: takes it out of message `messageId`.
+    /// A sending picture's cross: takes it out of message `messageId`. A
+    /// legacy chat's picture is its own outbox item, so both are its `localId`.
     case cancelUpload(messageId: String, piece: String)
     case permission(ChatPermissionTap)
     /// An option in a tool's question form, by tool message id.

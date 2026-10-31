@@ -20,7 +20,8 @@ extension HappyAPI {
         return upload
     }
 
-    public func uploadEncryptedBlob(_ data: Data, upload: AttachmentUpload) async throws {
+    /// `progress` hears the share of the request's bytes written, as they go.
+    public func uploadEncryptedBlob(_ data: Data, upload: AttachmentUpload, progress: (@Sendable (Double) -> Void)? = nil) async throws {
         guard let url = URL(string: upload.uploadUrl), ["https", "http"].contains(url.scheme ?? "") else {
             throw APIError.decoding("invalid upload URL")
         }
@@ -50,7 +51,11 @@ extension HappyAPI {
         } else {
             throw APIError.decoding("unsupported upload method")
         }
-        try validateAttachmentResponse(try await transport.send(HTTPRequest(method: upload.method, url: url, headers: headers, body: body)))
+        let request = HTTPRequest(method: upload.method, url: url, headers: headers, body: body)
+        guard let progress else { return try validateAttachmentResponse(try await transport.send(request)) }
+        try validateAttachmentResponse(try await transport.send(request) { sent, total in
+            progress(total > 0 ? Double(sent) / Double(total) : 1)
+        })
     }
 
     private func isAttachmentServerURL(_ url: URL) -> Bool {

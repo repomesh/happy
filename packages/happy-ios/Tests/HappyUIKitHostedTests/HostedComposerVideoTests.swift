@@ -61,29 +61,33 @@ final class HostedComposerVideoTests: XCTestCase {
         try await wait { grid.visibleCells.contains { $0.accessibilityLabel?.hasPrefix("Video,") == true } }
         let tile = try XCTUnwrap(grid.visibleCells.compactMap { $0 as? AttachGridCell }.first { $0.itemID == asset.localIdentifier })
         XCTAssertTrue(tile.accessibilityLabel?.hasPrefix("Video,") == true)
-        sheet.collectionView(grid, didSelectItemAt: try XCTUnwrap(grid.indexPath(for: tile)))
+        tile.check.sendActions(for: .touchUpInside)
         XCTAssertTrue(tile.accessibilityLabel?.contains("picked 1") == true)
         try await keep(window, "composer-plus-video-grid")
-        try button("attach-add", in: sheet.view).sendActions(for: .touchUpInside)
-        try await wait { card.configuration.attachments.count == 1 && chat.presentedViewController == nil }
-        try assertVideo(card, source: source)
-        try await keep(window, "composer-video-attached")
-        let remove = try XCTUnwrap(subviews(card).compactMap { $0 as? UIControl }.first { $0.accessibilityIdentifier == "composer-attachment-remove" })
-        remove.sendActions(for: .touchUpInside)
-        XCTAssertTrue(card.configuration.attachments.isEmpty)
+        try await Task.sleep(for: .milliseconds(500))
+        // Sent from the menu: the composer sends it, and the chat shows it.
+        try button("attach-send", in: sheet.view).sendActions(for: .touchUpInside)
+        try await wait { chat.presentedViewController == nil && card.configuration.attachments.isEmpty }
+        try await wait { self.videoTiles(chat.view) == 1 }
+        try await keep(window, "composer-video-sent")
 
-        // The same + again: the video is still first, and attaches again.
+        // The same + again: the video is still first, and sends again.
         try plus(in: card).sendActions(for: .touchUpInside)
         try await wait { chat.presentedViewController is AttachSheetViewController }
         let secondSheet = try XCTUnwrap(chat.presentedViewController as? AttachSheetViewController)
         let secondGrid = try XCTUnwrap(subviews(secondSheet.view).first { $0.accessibilityIdentifier == "attach-grid" } as? UICollectionView)
         try await wait { secondGrid.visibleCells.compactMap { $0 as? AttachGridCell }.contains { $0.itemID == asset.localIdentifier } }
         let cell = try XCTUnwrap(secondGrid.visibleCells.compactMap { $0 as? AttachGridCell }.first { $0.itemID == asset.localIdentifier })
-        secondSheet.collectionView(secondGrid, didSelectItemAt: try XCTUnwrap(secondGrid.indexPath(for: cell)))
+        cell.check.sendActions(for: .touchUpInside)
         try await keep(window, "composer-grid-video-picked")
-        try button("attach-add", in: secondSheet.view).sendActions(for: .touchUpInside)
-        try await wait { card.configuration.attachments.count == 1 && chat.presentedViewController == nil }
-        try assertVideo(card, source: source)
+        try await Task.sleep(for: .milliseconds(500))
+        try button("attach-send", in: secondSheet.view).sendActions(for: .touchUpInside)
+        try await wait { chat.presentedViewController == nil }
+        try await wait { self.videoTiles(chat.view) == 2 }
+    }
+
+    private func videoTiles(_ view: UIView) -> Int {
+        subviews(view).filter { ($0 as? ChatMediaView)?.window != nil && !$0.isHidden }.count
     }
 
     private func assertVideo(_ card: AgentInputCardView, source: URL) throws {

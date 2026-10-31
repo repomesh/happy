@@ -269,6 +269,8 @@ enum ChatRows {
             var question: ChatQuestionState?
             var diffs: [Int: Set<Int>] = [:]
             if case .message(.toolCall(let call)) = item {
+                // An attachment is its own outbox item, under its call id.
+                if call.tool.name == "file", let localId = call.tool.callId { delivery = deliveries[localId] }
                 diffs = view.diffExpanded[call.id] ?? [:]
                 expanded = view.expandedTools.contains(call.id)
                 busy = call.tool.permission.flatMap { view.permissionBusy[$0.id] }

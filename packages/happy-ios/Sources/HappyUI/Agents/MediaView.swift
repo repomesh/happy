@@ -26,7 +26,7 @@ protocol ChatMediaSource: AnyObject {
 /// recording shows its first frame under a play button; a tap plays it. A
 /// picture that failed keeps its placeholder under a quiet glyph and is
 /// asked for again when the computer is back (`MediaLoader.retry`).
-final class ChatMediaView: UIView {
+final class ChatMediaView: UIView, UploadRingTile {
     nonisolated static let radius: CGFloat = 8
     static let playIconSize: CGFloat = 22
 

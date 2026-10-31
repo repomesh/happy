@@ -623,7 +623,7 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
 
     private func makeChatAttachments() -> ChatAttachmentImages {
         ChatAttachmentImages(
-            pictures: account.attachmentPictures, sessionId: chatId, load: services.attachment
+            pictures: account.attachmentPictures, sessionId: chatId, files: account.filesDirectory, load: services.attachment
         )
     }
 
@@ -1896,9 +1896,10 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
         case .retry(let localId):
             let sender = services.sender
             Task { try? await sender.retry(localId: localId) }
-        case .cancelUpload:
-            // Only a V2 conversation's sending pictures have a cross.
-            break
+        case .cancelUpload(let localId, _):
+            // A picture's cross takes out that file alone; its text still goes.
+            let sender = services.sender
+            Task { try? await sender.discard(localId: localId) }
         case .copyMenu, .selectable, .markdownSelectable:
             // Long presses; see `chatList(_:hold:frame:at:)`.
             break

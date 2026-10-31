@@ -167,6 +167,12 @@ final class HostedAttachMenuTests: XCTestCase {
 
     private func views(_ view: UIView) -> [UIView] { [view] + view.subviews.flatMap(views) }
 
+    /// Taps picture `index`'s circle, as a finger would.
+    private func pick(_ index: Int, in grid: UICollectionView) throws {
+        let cell = try XCTUnwrap(grid.cellForItem(at: IndexPath(item: index, section: 0)) as? AttachGridCell)
+        cell.check.sendActions(for: .touchUpInside)
+    }
+
     private func wait(_ seconds: Double = 10, _ condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(seconds)
         while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
@@ -202,33 +208,41 @@ final class HostedAttachMenuTests: XCTestCase {
     // MARK: Library access
 
     /// Full access: the newest first beside the camera, picked in order
-    /// with their numbers, "Add 2" in the tab bar's place; added, a photo
-    /// and a video wait in the composer.
-    func testAuthorizedGridPicksInOrderAndAttachesPhotoAndVideo() async throws {
+    /// with their numbers; the count beside close, the tab bar turned into
+    /// the caption with send, which starts from the draft and writes back
+    /// to it; sent, the menu goes and the composer sends both with it.
+    func testAuthorizedGridPicksInOrderAndSendsWithTheCaption() async throws {
         try await open(FixtureAttachLibrary(access: .authorized, count: 30))
+        card.setText("Draft", selection: NSRange(location: 5, length: 0))
         let sheet = try await menu()
         let grid = try XCTUnwrap(view("attach-grid", in: sheet.view) as? UICollectionView)
         try await wait { grid.visibleCells.count >= 6 }
         XCTAssertNotNil(view("attach-camera", in: sheet.view), "no camera cell")
         XCTAssertNil(view("attach-no-access", in: sheet.view))
         XCTAssertNil(view("attach-limited", in: sheet.view))
-        XCTAssertNil(view("attach-add", in: sheet.view), "Add before anything was picked")
+        XCTAssertNil(view("attach-send", in: sheet.view), "send before anything was picked")
+        XCTAssertNil(view("attach-count", in: sheet.view), "a count before anything was picked")
 
-        sheet.collectionView(grid, didSelectItemAt: IndexPath(item: 0, section: 0))
-        sheet.collectionView(grid, didSelectItemAt: IndexPath(item: 1, section: 0))
+        try pick(0, in: grid)
+        try pick(1, in: grid)
         XCTAssertEqual(sheet.picked, ["fixture-0", "fixture-1"])
         let first = try XCTUnwrap(view("attach-photo:0", in: sheet.view))
         let second = try XCTUnwrap(view("attach-photo:1", in: sheet.view))
         XCTAssertEqual(first.accessibilityLabel, "Photo, picked 1")
         XCTAssertTrue(second.accessibilityLabel?.hasPrefix("Video, ") == true && second.accessibilityLabel?.hasSuffix("picked 2") == true, second.accessibilityLabel ?? "")
-        try await Task.sleep(for: .milliseconds(400))
-        let add = try XCTUnwrap(view("attach-add", in: sheet.view) as? UIControl)
-        XCTAssertEqual(add.accessibilityLabel, "Add 2")
+        try await Task.sleep(for: .milliseconds(500))
+        let send = try XCTUnwrap(view("attach-send", in: sheet.view) as? UIControl)
+        XCTAssertEqual(view("attach-count", in: sheet.view)?.accessibilityLabel, "2 selected")
+        let caption = try XCTUnwrap(view("attach-caption", in: sheet.view) as? UITextView)
+        XCTAssertEqual(caption.text, "Draft", "the caption isn't the draft")
+        XCTAssertNil(view("attach-tab-files", in: sheet.view), "the tabs stayed under the caption")
         try await keep("attach-authorized-selected")
 
-        add.sendActions(for: .touchUpInside)
-        try await wait(15) { self.card.configuration.attachments.count == 2 && self.chat.presentedViewController == nil }
-        XCTAssertEqual(card.configuration.attachments.map(\.mimeType), ["image/jpeg", "video/quicktime"])
+        caption.text = "Draft and two"
+        caption.delegate?.textViewDidChange?(caption)
+        XCTAssertEqual(card.text, "Draft and two", "the caption didn't write back to the draft")
+        send.sendActions(for: .touchUpInside)
+        try await wait(15) { self.chat.presentedViewController == nil && self.card.text.isEmpty && self.card.configuration.attachments.isEmpty }
     }
 
     /// Limited access: only what was allowed, under Telegram's note with
@@ -284,9 +298,9 @@ final class HostedAttachMenuTests: XCTestCase {
         for access in [AttachLibraryAccess.authorized, .limited, .denied] {
             try await open(FixtureAttachLibrary(access: access, count: 8))
             let sheet = try await menu()
-            let files = try XCTUnwrap(view("attach-tab-files", in: sheet.view) as? UIControl)
+            let files = try XCTUnwrap(view("attach-tab-files", in: sheet.view))
             for page in [nil, files] {
-                page?.sendActions(for: .touchUpInside)
+                _ = page?.accessibilityActivate()
                 try await Task.sleep(for: .milliseconds(400))
                 let all = views(sheet.view)
                 XCTAssertFalse(all.contains { $0.accessibilityIdentifier == "attach-paste" }, "\(access): a paste row")
@@ -390,13 +404,14 @@ final class HostedAttachMenuTests: XCTestCase {
         let sheet = try await menu()
         let grid = try XCTUnwrap(view("attach-grid", in: sheet.view) as? UICollectionView)
         try await wait { grid.visibleCells.count >= 2 }
-        sheet.collectionView(grid, didSelectItemAt: IndexPath(item: 0, section: 0))
-        sheet.collectionView(grid, didSelectItemAt: IndexPath(item: 1, section: 0))
-        try await Task.sleep(for: .milliseconds(300))
-        try XCTUnwrap(view("attach-add", in: sheet.view) as? UIControl).sendActions(for: .touchUpInside)
-        try await wait(15) { self.card.configuration.attachments.count == 2 && self.chat.presentedViewController == nil }
-        card.setText("Here they are", selection: NSRange(location: 13, length: 0))
-        chat.agentInputCardDidPressSend(card)
+        try pick(0, in: grid)
+        try pick(1, in: grid)
+        try await Task.sleep(for: .milliseconds(500))
+        let caption = try XCTUnwrap(view("attach-caption", in: sheet.view) as? UITextView)
+        caption.text = "Here they are"
+        caption.delegate?.textViewDidChange?(caption)
+        // Sent from the menu, as Telegram's send does.
+        try XCTUnwrap(view("attach-send", in: sheet.view) as? UIControl).sendActions(for: .touchUpInside)
 
         // Both tiles get rings; each only ever moves forward.
         var seen: [ObjectIdentifier: [UploadRingView.State]] = [:]

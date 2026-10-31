@@ -744,9 +744,23 @@ public final class LocalStore: Sendable {
     }
 
     /// Discard the selected item and its dependency chain, including its files.
+    /// A file alone is taken out of its chain: what waited on it waits on
+    /// what it waited on, so the text it went with still goes.
     public func discardOutbox(localId: String) throws -> [AttachmentRecord] {
         try performWrite { db in
             let items = try OutboxRecord.fetchAll(db)
+            if let file = items.first(where: { $0.localId == localId && $0.kind == .file }) {
+                for var item in items where item.dependsOn == localId {
+                    item.dependsOn = file.dependsOn
+                    try item.update(db)
+                }
+                let attachments = try AttachmentRecord.filter(Column("outboxLocalId") == localId).fetchAll(db)
+                for attachment in attachments {
+                    _ = try AttachmentRecord.deleteOne(db, key: attachment.localId)
+                }
+                _ = try OutboxRecord.deleteOne(db, key: localId)
+                return attachments
+            }
             var ids: Set<String> = [localId]
             var changed = true
             while changed {

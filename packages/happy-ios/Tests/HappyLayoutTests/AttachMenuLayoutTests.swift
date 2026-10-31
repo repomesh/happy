@@ -45,8 +45,6 @@ final class AttachMenuLayoutTests: XCTestCase {
         XCTAssertEqual(pulled.barBottom, 974)
         // Never above the expanded top.
         XCTAssertEqual(sheet.placement(top: 10).clip, rect(0, 72, 402, 802))
-
-        XCTAssertEqual(sheet.grabber(clipWidth: 402), rect(183, 5, 36, 5))
     }
 
     func testANarrowPhoneRestsHigher() {
@@ -64,7 +62,6 @@ final class AttachMenuLayoutTests: XCTestCase {
         XCTAssertFalse(sheet.canCollapse)
         XCTAssertEqual(sheet.cornerRadius, 0)
         XCTAssertEqual(sheet.sides, LayoutInsets(left: 62, right: 62))
-        XCTAssertNil(sheet.grabber(clipWidth: 874))
         let placement = sheet.placement(top: 0)
         XCTAssertEqual(placement.clip, rect(0, 0, 874, 402))
         XCTAssertEqual(placement.scale, 1)
@@ -96,82 +93,97 @@ final class AttachMenuLayoutTests: XCTestCase {
         XCTAssertEqual(short.card, rect(606, 40, 390, 524))
     }
 
-    // MARK: Dragging
+    // MARK: The panel
 
-    func testADragFollowsTheFingerBetweenRestAndExpandedThenDrops() {
-        // From rest: up toward expanded, down past rest.
-        XCTAssertEqual(AttachMenuMotion.drag(expanded: false, canCollapse: true, travel: 217, translation: -50).offset, 167)
-        XCTAssertEqual(AttachMenuMotion.drag(expanded: false, canCollapse: true, travel: 217, translation: -300).offset, 0)
-        let down = AttachMenuMotion.drag(expanded: false, canCollapse: true, travel: 217, translation: 40)
-        XCTAssertEqual(down.offset, 217)
-        XCTAssertEqual(down.drop, 40)
-        // From expanded: down to rest, then past it.
-        XCTAssertEqual(AttachMenuMotion.drag(expanded: true, canCollapse: true, travel: 217, translation: 100).offset, 100)
-        let past = AttachMenuMotion.drag(expanded: true, canCollapse: true, travel: 217, translation: 300)
-        XCTAssertEqual(past.offset, 217)
-        XCTAssertEqual(past.drop, 83)
-        XCTAssertEqual(AttachMenuMotion.drag(expanded: true, canCollapse: true, travel: 217, translation: -20).offset, 0)
-        // A sheet that can't rest lower only drops.
-        let fixed = AttachMenuMotion.drag(expanded: true, canCollapse: false, travel: 0, translation: 50)
-        XCTAssertEqual(fixed.offset, 0)
-        XCTAssertEqual(fixed.drop, 50)
-        XCTAssertEqual(AttachMenuMotion.drag(expanded: true, canCollapse: false, travel: 0, translation: -10).drop, 0)
-    }
-
-    func testWhereADragSettles() {
-        func settle(expanded: Bool, offset: CGFloat, drop: CGFloat = 0, velocity: CGFloat = 0, scrolled: Bool = false, canCollapse: Bool = true) -> AttachMenuMotion.Settle {
-            AttachMenuMotion.settle(expanded: expanded, canCollapse: canCollapse, travel: 217, offset: offset, drop: drop, velocity: velocity, scrolled: scrolled)
-        }
-        // 60 past rest goes; less stays; any drop flicked down goes.
-        XCTAssertEqual(settle(expanded: false, offset: 217, drop: 61), .dismiss)
-        XCTAssertEqual(settle(expanded: false, offset: 217, drop: 59), .stay)
-        XCTAssertEqual(settle(expanded: false, offset: 217, drop: 10, velocity: 301), .dismiss)
-        // Expanded at the top, a hard flick goes, unless the grid took it.
-        XCTAssertEqual(settle(expanded: true, offset: 0, velocity: 1801), .dismiss)
-        XCTAssertEqual(settle(expanded: true, offset: 0, velocity: 1801, scrolled: true), .stay)
-        // Expanded: past half way down, or flicked, rests again.
-        XCTAssertEqual(settle(expanded: true, offset: 120), .collapse)
-        XCTAssertEqual(settle(expanded: true, offset: 100), .stay)
-        XCTAssertEqual(settle(expanded: true, offset: 100, velocity: 301), .collapse)
-        // At rest: past half way up, or flicked up, expands.
-        XCTAssertEqual(settle(expanded: false, offset: 100), .expand)
-        XCTAssertEqual(settle(expanded: false, offset: 200, velocity: -301), .expand)
-        XCTAssertEqual(settle(expanded: false, offset: 200), .stay)
-        // A sheet that can't rest lower needs 180.
-        XCTAssertEqual(settle(expanded: true, offset: 0, drop: 100, canCollapse: false), .stay)
-        XCTAssertEqual(settle(expanded: true, offset: 0, drop: 181, canCollapse: false), .dismiss)
-    }
-
-    // MARK: The bar
+    private let titles = [CGSize(width: 40, height: 12), CGSize(width: 28, height: 12)]
 
     func testTheTabBarIsA160GlassCapsule22OffTheBottom() {
-        let bar = AttachMenuBarLayout(minX: 0, width: 402, bottom: 874, titles: [CGSize(width: 40, height: 12), CGSize(width: 28, height: 12)], selected: 0, picking: false, addTitle: CGSize(width: 60, height: 21), pixel: 0.5)
-        XCTAssertEqual(bar.capsule, rect(121, 790, 160, 62))
-        XCTAssertEqual(bar.cornerRadius, 31)
-        // Two 72 tabs 82 apart, 3 in; the icon 9 and a pixel down, the
-        // name 15 and two pixels under the icon's middle.
-        XCTAssertEqual(bar.tabs[0].frame, rect(3, 0, 72, 62))
-        XCTAssertEqual(bar.tabs[0].icon, rect(24, 9.5, 30, 30))
-        XCTAssertEqual(bar.tabs[0].title, rect(19, 34.5, 40, 12))
-        XCTAssertEqual(bar.tabs[1].frame, rect(85, 0, 72, 62))
-        XCTAssertEqual(bar.tabs[1].icon, rect(106, 9.5, 30, 30))
-        XCTAssertEqual(bar.tabs[1].title, rect(107, 34.5, 28, 12))
-        // The pill behind the chosen tab, 3 in from the capsule's top and bottom.
-        XCTAssertEqual(bar.selection, rect(3, 3, 72, 56))
-        let files = AttachMenuBarLayout(minX: 0, width: 402, bottom: 874, titles: [CGSize(width: 40, height: 12), CGSize(width: 28, height: 12)], selected: 1, picking: false, addTitle: .zero, pixel: 0.5)
-        XCTAssertEqual(files.selection, rect(85, 3, 72, 56))
+        let panel = AttachMenuPanelLayout(.init(minX: 0, width: 402, bottom: 874, titles: titles, selected: 0, picking: false, pixel: 1.0 / 3))
+        XCTAssertEqual(panel.tabBar, rect(121, 790, 160, 62))
+        XCTAssertEqual(panel.glass, panel.tabBar)
+        XCTAssertEqual(panel.glassRadius, 31)
+        XCTAssertEqual(panel.tabsOffset, 0)
+        // Two 72 tabs 82 apart, 3 in; the glyph 9 and a pixel down.
+        XCTAssertEqual(panel.tabs[0].frame, rect(3, 0, 72, 62))
+        XCTAssertEqual(panel.tabs[1].frame, rect(85, 0, 72, 62))
+        XCTAssertEqual(panel.tabs[0].icon.minY, 9 + 1.0 / 3, accuracy: 0.0001)
+        // The lens behind the chosen tab, 3 in from the bar's top and bottom.
+        XCTAssertEqual(panel.lens, rect(3, 3, 72, 56))
+        let files = AttachMenuPanelLayout(.init(minX: 0, width: 402, bottom: 874, titles: titles, selected: 1, picking: false, pixel: 1.0 / 3))
+        XCTAssertEqual(files.lens, rect(85, 3, 72, 56))
     }
 
-    func testPickingTurnsTheBarIntoAddN() {
-        let bar = AttachMenuBarLayout(minX: 0, width: 402, bottom: 874, titles: [CGSize(width: 40, height: 12), CGSize(width: 28, height: 12)], selected: 0, picking: true, addTitle: CGSize(width: 60, height: 21), pixel: 0.5)
-        XCTAssertEqual(bar.capsule, rect(28, 800, 346, 52))
-        XCTAssertEqual(bar.cornerRadius, 26)
-        XCTAssertEqual(bar.add, rect(143, 15, 60, 21))
+    /// Each tab's glyph and name share the tab's centre line, and the name
+    /// starts 15 and two pixels under the glyph's middle: under it, not
+    /// over it.
+    func testEachTabsGlyphAndNameAreCentredOnTheTabAndStacked() {
+        for scale: CGFloat in [2, 3] {
+            let pixel = 1 / scale
+            let measured = [CGSize(width: 37.67, height: 11.93), CGSize(width: 23.33, height: 11.93), CGSize(width: 71.9, height: 11.93)]
+            let panel = AttachMenuPanelLayout(.init(minX: 0, width: 402, bottom: 874, titles: measured, selected: 0, picking: false, pixel: pixel))
+            for tab in panel.tabs {
+                XCTAssertEqual(tab.icon.midX, tab.frame.midX, accuracy: pixel / 2 + 0.0001, "glyph \(tab)")
+                XCTAssertEqual(tab.title.midX, tab.frame.midX, accuracy: pixel / 2 + 0.0001, "name \(tab)")
+                XCTAssertEqual(tab.icon.size, CGSize(width: 30, height: 30))
+                XCTAssertEqual(tab.title.minY, tab.icon.midY + 15 + 2 * pixel, accuracy: 0.0001)
+                XCTAssertGreaterThan(tab.title.minY, tab.icon.maxY)
+                XCTAssertLessThanOrEqual(tab.title.maxY, tab.frame.maxY - 8)
+                // Whole pixels, so neither blurs.
+                XCTAssertEqual((tab.icon.minX * scale).rounded(), tab.icon.minX * scale, accuracy: 0.0001)
+                XCTAssertEqual((tab.title.minX * scale).rounded(), tab.title.minX * scale, accuracy: 0.0001)
+            }
+        }
+    }
+
+    func testPickingTurnsTheBarIntoTheCaption() {
+        let panel = AttachMenuPanelLayout(.init(minX: 0, width: 402, bottom: 874, titles: titles, selected: 0, picking: true, textHeight: 21, placeholder: CGSize(width: 110, height: 21), empty: true, pixel: 1.0 / 3))
+        // 28 in from the sides and the bottom, 40 tall, corners 20.
+        XCTAssertEqual(panel.glass, rect(28, 806, 346, 40))
+        XCTAssertEqual(panel.glassRadius, 20)
+        // The tabs rise 11 as they fade.
+        XCTAssertEqual(panel.tabsOffset, -11)
+        // Send in the last 51; its 40 × 34 capsule 3 in.
+        XCTAssertEqual(panel.send, rect(295, 0, 51, 40))
+        XCTAssertEqual(panel.sendBackground, rect(303, 3, 40, 34))
+        XCTAssertEqual(panel.text.minY, 28.0 / 3, accuracy: 0.0001)
+        XCTAssertEqual(panel.text.width, 279)
+        // Unfocused and empty, the placeholder in the middle.
+        XCTAssertEqual(panel.placeholder.midX, 173, accuracy: 0.5)
+        // Focused over the keyboard: 16 in, 8 above it, the placeholder at the text's start.
+        let focused = AttachMenuPanelLayout(.init(minX: 0, width: 402, bottom: 538, titles: titles, selected: 0, picking: true, focused: true, textHeight: 21, placeholder: CGSize(width: 110, height: 21), empty: true, pixel: 1.0 / 3))
+        XCTAssertEqual(focused.glass, rect(16, 490, 370, 40))
+        XCTAssertEqual(focused.placeholder.minX, 16)
+        // Three lines: taller, send at the foot, corners still 20.
+        let tall = AttachMenuPanelLayout(.init(minX: 0, width: 402, bottom: 538, titles: titles, selected: 0, picking: true, focused: true, textHeight: 62, placeholder: CGSize(width: 110, height: 21), empty: false, pixel: 1.0 / 3))
+        XCTAssertEqual(tall.glass, rect(16, 449, 370, 81))
+        XCTAssertEqual(tall.sendBackground, rect(327, 44, 40, 34))
+        XCTAssertEqual(tall.glassRadius, 20)
+        XCTAssertEqual(AttachMenuPanelLayout.textWidth(width: 402, sides: .zero, focused: true), 303)
     }
 
     func testTheIPadCardsBarSitsInTheCard() {
-        let bar = AttachMenuBarLayout(minX: 16, width: 390, bottom: 1250, titles: [CGSize(width: 40, height: 12), CGSize(width: 28, height: 12)], selected: 0, picking: false, addTitle: .zero, pixel: 0.5)
-        XCTAssertEqual(bar.capsule, rect(131, 1166, 160, 62))
+        let panel = AttachMenuPanelLayout(.init(minX: 16, width: 390, bottom: 1250, titles: titles, selected: 0, picking: false, pixel: 0.5))
+        XCTAssertEqual(panel.tabBar, rect(131, 1166, 160, 62))
+    }
+
+    // MARK: The header
+
+    func testTheHeaderIsTelegramsGlassControls() {
+        let header = AttachMenuHeaderLayout(width: 402, title: CGSize(width: 64.5, height: 20.3), arrow: true, countText: CGSize(width: 10, height: 20.3), pixel: 1.0 / 3)
+        XCTAssertEqual(header.close, rect(16, 16, 44, 44))
+        // The count 12 right of close: 38 wider than its number.
+        XCTAssertEqual(header.count, rect(72, 16, 48, 44))
+        XCTAssertEqual(header.countLabel.minX, 27 - 1.0 / 3, accuracy: 0.0001)
+        // Title and arrow centred together on the buttons' middle, 1 up.
+        XCTAssertEqual(header.title.minX + (header.arrow!.maxX - header.title.minX) / 2, 201, accuracy: 0.5)
+        XCTAssertEqual(header.title.midY, 38 - 1 - 1.0 / 6, accuracy: 0.0001)
+        XCTAssertEqual(header.arrow?.minX, header.title.maxX + 1)
+        XCTAssertEqual(header.edge, rect(0, 0, 402, 80))
+        let plain = AttachMenuHeaderLayout(width: 402, title: CGSize(width: 64.5, height: 20.3), arrow: false, countText: .zero, pixel: 1.0 / 3)
+        XCTAssertNil(plain.arrow)
+        XCTAssertEqual(plain.title.midX, 201, accuracy: 0.5)
+        // Sideways, clear of the notch.
+        XCTAssertEqual(AttachMenuHeaderLayout(width: 874, sides: LayoutInsets(left: 62, right: 62), title: .zero, arrow: false, countText: .zero, pixel: 1.0 / 3).close.minX, 78)
     }
 
     // MARK: The grid
@@ -220,14 +232,14 @@ final class AttachMenuLayoutTests: XCTestCase {
 
     // MARK: The page
 
-    func testTheGalleryHeaderAndLimitedNote() {
+    func testTheGridRunsUnderTheHeaderWithTheLimitedNote() {
         let layout = AttachMenuContentLayout(.init(
-            width: 402, height: 802, title: CGSize(width: 64.5, height: 20.3), wide: false, pixel: 0.5, count: 10, camera: true,
+            width: 402, height: 802, wide: false, pixel: 0.5, count: 10, camera: true,
             note: .fixed(width: 240, height: 36), noteButton: CGSize(width: 64, height: 18), hidden: 217
         ))
-        // The close circle as every sheet's; the title centred on it.
-        XCTAssertEqual(layout.close, rect(342, 16, 44, 44))
-        XCTAssertEqual(layout.title, rect(168, 27, 65, 21))
+        // The grid fills the content, 68 of header over its top.
+        XCTAssertEqual(layout.gridFrame, rect(0, 0, 402, 802))
+        XCTAssertEqual(layout.topInset, 68)
         XCTAssertEqual(layout.page, rect(0, 68, 402, 734))
         // The resting sheet's 217 below the screen and the bar's 92 stay clear.
         XCTAssertEqual(layout.bottomInset, 309)
@@ -241,15 +253,14 @@ final class AttachMenuLayoutTests: XCTestCase {
     }
 
     func testFullAccessHasNoNote() {
-        let layout = AttachMenuContentLayout(.init(width: 402, height: 802, title: CGSize(width: 65, height: 21), wide: false, pixel: 0.5, count: 3, camera: false))
+        let layout = AttachMenuContentLayout(.init(width: 402, height: 802, wide: false, pixel: 0.5, count: 3, camera: false))
         XCTAssertNil(layout.note)
         XCTAssertEqual(layout.grid.frame(at: 0), rect(0, 0, 133, 133))
         XCTAssertEqual(layout.bottomInset, 92)
     }
 
-    func testSidewaysTheCloseStaysClearOfTheNotch() {
-        let layout = AttachMenuContentLayout(.init(width: 874, height: 402, sides: LayoutInsets(left: 62, right: 62), title: CGSize(width: 65, height: 21), wide: true, pixel: 0.5, count: 3, camera: true))
-        XCTAssertEqual(layout.close, rect(752, 16, 44, 44))
+    func testSidewaysTheGridStaysClearOfTheNotch() {
+        let layout = AttachMenuContentLayout(.init(width: 874, height: 402, sides: LayoutInsets(left: 62, right: 62), wide: true, pixel: 0.5, count: 3, camera: true))
         XCTAssertEqual(layout.grid.camera?.minX, 62)
     }
 

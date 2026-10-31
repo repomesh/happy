@@ -68,6 +68,9 @@ public actor LegacySyncEngine {
         /// UIKit composition supplies a reference-counted background-task lease.
         /// true acquires before an operation; false releases after it finishes.
         public var deliveryActivity: @Sendable (Bool) async -> Void = { _ in }
+        /// Where each outbox file's upload is, by `UploadProgressBoard.outboxKey`,
+        /// for the ring over its picture in the chat.
+        public var uploads: UploadProgressBoard = .shared
 
         public init() {}
     }
@@ -91,6 +94,8 @@ public actor LegacySyncEngine {
     private var backgrounded = false
     private var filesDirectory: URL?
     private var retryTask: Task<Void, Never>?
+    /// Outbox files' uploads on their way, by localId, so a discard stops one.
+    private var uploading: [String: Task<Void, Error>] = [:]
 
     public init(
         api: HappyAPI,
@@ -604,11 +609,18 @@ public actor LegacySyncEngine {
         await invalidate(.outbox)
     }
 
-    public func discardSend(localId: String, filesDirectory: URL) throws {
+    /// A file taken out stops its upload, and the text it went with goes
+    /// on without it.
+    public func discardSend(localId: String, filesDirectory: URL) async throws {
         ThreadRules.assertOffMain()
         for attachment in try store.discardOutbox(localId: localId) {
+            if let outboxId = attachment.outboxLocalId {
+                uploading.removeValue(forKey: outboxId)?.cancel()
+                options.uploads.clear(key: UploadProgressBoard.outboxKey(outboxId))
+            }
             try? FileManager.default.removeItem(at: filesDirectory.appendingPathComponent(attachment.path))
         }
+        await invalidate(.outbox)
     }
 
     public func downloadAttachment(sessionId: String, ref: String) async throws -> Data {
@@ -631,7 +643,8 @@ public actor LegacySyncEngine {
             "name": .string(attachment.name),
             "size": .number(Double(attachment.size)),
         ]
-        if let width = attachment.width, let height = attachment.height, width > 0, height > 0 {
+        // sync.ts sends only pictures' shapes: a recording's would read as a picture.
+        if !attachment.mimeType.hasPrefix("video/"), let width = attachment.width, let height = attachment.height, width > 0, height > 0 {
             var image: [String: JSONValue] = ["width": .number(Double(width)), "height": .number(Double(height))]
             if let hash = attachment.thumbhash, !hash.isEmpty {
                 image["thumbhash"] = .string(hash)
@@ -706,11 +719,31 @@ public actor LegacySyncEngine {
                         throw SendingError.missingAttachment
                     }
                     if attachment.ref == nil {
+                        // Its ring turns while it is read, sealed and given a
+                        // place, then fills with the bytes written.
+                        let key = UploadProgressBoard.outboxKey(item.localId)
+                        let board = options.uploads
+                        board.set(key, .preparing)
                         let bytes = try Data(contentsOf: directory.appendingPathComponent(attachment.path))
                         let blob = try encryptedSessionBlob(sessionId: item.sessionId, bytes: bytes)
                         let upload = try await api.requestAttachmentUpload(sessionId: item.sessionId, filename: attachment.name, size: blob.count)
                         try checkDelivery(item, session: session)
-                        try await api.uploadEncryptedBlob(blob, upload: upload)
+                        let api = api
+                        let sending = Task {
+                            try await api.uploadEncryptedBlob(blob, upload: upload) { share in board.set(key, .uploading(share)) }
+                        }
+                        uploading[item.localId] = sending
+                        do {
+                            try await withTaskCancellationHandler { try await sending.value } onCancel: { sending.cancel() }
+                            uploading[item.localId] = nil
+                        } catch {
+                            uploading[item.localId] = nil
+                            // Taken out while it went: not a failure of the send.
+                            if sending.isCancelled { throw CancellationError() }
+                            throw error
+                        }
+                        try checkDelivery(item, session: session)
+                        board.set(key, .done)
                         attachment.ref = upload.ref
                         if try store.outbox(localId: item.localId) != nil {
                             try store.saveAttachment(attachment)
@@ -744,6 +777,7 @@ public actor LegacySyncEngine {
                     }
                 }
                 try store.removeFromOutbox(localId: item.localId)
+                if item.kind == .file { options.uploads.clear(key: UploadProgressBoard.outboxKey(item.localId)) }
             } catch {
                 item.lastError = String(describing: error)
                 if error is CancellationError {
@@ -757,8 +791,12 @@ public actor LegacySyncEngine {
                 do {
                     try store.updateOutbox(item)
                     let noRef = try store.attachment(outboxLocalId: item.localId)?.ref == nil
+                    // Its bytes didn't all go: the ring starts over next time.
+                    if item.kind == .file, noRef { options.uploads.clear(key: UploadProgressBoard.outboxKey(item.localId)) }
                     let skippedUpload = item.kind == .file && item.state == .failed && noRef
-                    if !skippedUpload {
+                    // Taken out meanwhile: what waited on it goes on.
+                    let discarded = try store.outbox(localId: item.localId) == nil
+                    if !skippedUpload, !discarded {
                         blocked.insert(item.sessionId)
                     }
                 } catch {
