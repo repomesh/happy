@@ -43,8 +43,6 @@ public final class AppCoordinator {
         window.rootViewController = shell // Tablet: was `navigation`.
         window.tintColor = UIColor(Palette.headerTint)
         window.makeKeyAndVisible()
-        // Every chat's header wears its shader from its first frame.
-        AvatarShaderRenderer.shared?.warm()
         context.account.onChange = { [weak self] state in
             self?.show(state)
         }

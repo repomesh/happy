@@ -16,10 +16,6 @@ import UIKit
 @MainActor
 final class ChatHeaderView: UIView {
     let titleView = ChatTitleView()
-    /// Laid out: the bar placed its items, so what follows them moves too
-    /// (`ChatBarShaders`). Told on the next turn, once the bar is done.
-    var onLayout: (() -> Void)?
-    private var layoutPending = false
 
     /// The title was tapped: the detail opens.
     var onOpen: (() -> Void)? {
@@ -70,13 +66,6 @@ final class ChatHeaderView: UIView {
 
     /// The glass the name and status sit on.
     let capsule = GlassCapsuleView(interactive: true)
-    /// The chat's own shader under the glass (`ChatPillShader`).
-    let backdrop = GlassShaderBackdrop()
-    /// What the shader is picked by: the chat's avatar's seed.
-    var shaderSeed: String? {
-        get { backdrop.seed }
-        set { backdrop.seed = newValue }
-    }
     private let statusLabel = ShimmerLabel()
     private static var statusFont: UIFont { LegacyFonts.font(.regular, size: 13) }
 
@@ -166,7 +155,6 @@ final class ChatHeaderView: UIView {
         super.layoutSubviews()
         let layout = layout
         capsule.frame = layout.capsule
-        backdrop.follow(capsule)
         let origin = layout.capsule.origin
         // The name's own box is the bar's 44: centred on its line.
         let height = ChatTitleLayout.height
@@ -174,12 +162,6 @@ final class ChatHeaderView: UIView {
             .offsetBy(dx: -origin.x, dy: -origin.y)
         statusLabel.frame = (layout.status ?? .zero).offsetBy(dx: -origin.x, dy: -origin.y)
         statusLabel.isHidden = layout.status == nil
-        guard onLayout != nil, !layoutPending else { return }
-        layoutPending = true
-        DispatchQueue.main.async { [weak self] in
-            self?.layoutPending = false
-            self?.onLayout?()
-        }
     }
 
     /// Only the capsule takes a touch; the bar around it stays the bar's.

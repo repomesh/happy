@@ -150,7 +150,7 @@ moves. Each workload reports these pairs:
 | `memMB`, `peakMB` | Memory. |
 | `views`, `layers` | The transcript's view and layer count when the workload ends. |
 | `renderCpu`, `appCpu` | CPU seconds over the workload, for the simulator's render server and for the app. |
-| `shaderFrames`, `shaderGpuMean`/`Max`, `shaderCpuMean`/`Max` | The live shaders (the chat header's, Animated Avatars): ticks that drew, the GPU's ms per tick, and the main thread's ms encoding one. They move only with `gym.py run --live-avatars` (`--avatar-fps N` for another rate); without it the header holds one still frame. |
+| `shaderFrames`, `shaderGpuMean`/`Max`, `shaderCpuMean`/`Max` | The live avatars (Animated Avatars): ticks that drew, the GPU's ms per tick, and the main thread's ms encoding one. Only with `gym.py run --live-avatars` (`--avatar-fps N` for another rate). |
 
 The pairs that cover every frame, not only frames in motion, are prefixed
 `all`.
@@ -192,8 +192,9 @@ machine.
 
 ### Live shaders (October 2026)
 
-The chat header's three shaders (title capsule, Back, Compose), live, on the
-synthetic long chat (`gym.py run slow-drag fling-to-top --live-avatars`):
+Three shaders live at once, on the synthetic long chat (measured on the chat
+header's glass, which wore them for a day in October 2026; an avatar costs the
+same per pixel) (`gym.py run slow-drag fling-to-top --live-avatars`):
 
 | | still | 20 fps | 30 fps |
 | --- | --- | --- | --- |

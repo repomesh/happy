@@ -31,7 +31,7 @@ private let skipsQuiescence: Bool = {
 /// one heavy with pictures, `GYM_STREAM` the one a reply streams into
 /// (`fakellm.py`'s "stream P W"). `GYM_ITERATIONS` repeats the XCTest
 /// metrics (default 3). `GYM_LIVE_AVATARS=1` turns Animated Avatars on, so
-/// the chat header's shader moves through the workload; `GYM_AVATAR_FPS`
+/// the avatars on screen move through the workload; `GYM_AVATAR_FPS`
 /// draws them at another rate.
 @MainActor
 final class ScrollPerfGymTests: XCTestCase {

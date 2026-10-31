@@ -270,7 +270,7 @@ public final class GymFrameMeter: NSObject {
             ("peakMB", String(format: "%.1f", peakFootprint)),
         ]
         var extra: [(String, String)] = [("scripting", script == nil ? "0" : "1")]
-        // The live shaders (the chat header's, Animated Avatars): frames
+        // The live avatars (Animated Avatars): frames
         // drawn, the GPU's time on each and the main thread's encoding it.
         if let cost = AvatarShaderRenderer.shared?.cost {
             extra += [

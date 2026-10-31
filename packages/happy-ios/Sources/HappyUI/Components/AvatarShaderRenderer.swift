@@ -27,31 +27,13 @@ public enum LiveAvatars {
     static let slots = NSHashTable<AnyObject>.weakObjects()
 }
 
-/// What a shader view draws: which placeholder, how (`ShaderLook`), how
-/// fast and how large, and which part of what canvas.
+/// What a live placeholder draws: which one, in colour or grey, and how
+/// fast.
 struct ShaderDrawing: Equatable {
     var index = 0
     var monochrome = false
-    var look = ShaderLook.avatar
     /// The clock's rate; nil, an avatar's for its size (`AvatarShader.speed`).
     var speed: Float?
-    /// How much of the avatar the canvas spans: 1 all of it.
-    var zoom: Float = 1
-    /// Pixels per point; nil, the screen's.
-    var resolution: Float?
-    /// This view's frame in the canvas it is a window onto, in points; nil,
-    /// it is its own canvas, as an avatar is.
-    var canvas: (frame: CGRect, size: CGSize)?
-    /// It moves only while Animated Avatars is on (a still frame otherwise),
-    /// as the header's glass does; an avatar's own is only ever there with
-    /// it on.
-    var followsSetting = false
-
-    static func == (a: Self, b: Self) -> Bool {
-        a.index == b.index && a.monochrome == b.monochrome && a.look == b.look && a.speed == b.speed && a.zoom == b.zoom
-            && a.resolution == b.resolution && a.canvas?.frame == b.canvas?.frame && a.canvas?.size == b.canvas?.size
-            && a.followsSetting == b.followsSetting
-    }
 }
 
 /// One placeholder as its live shader, filling the view it is put in (which
@@ -68,10 +50,6 @@ final class LiveAvatarView: UIView {
     private(set) var started = CACurrentMediaTime()
     /// A frame of the current placeholder is on screen.
     var drawn = false
-    /// Draws its first frame as soon as it is laid out, in that frame's
-    /// transaction, rather than at the next tick: what is on screen from
-    /// the first frame (the chat's header).
-    var drawsOnLayout = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -102,16 +80,10 @@ final class LiveAvatarView: UIView {
         let restyled = drawing.index != self.drawing.index || drawing.monochrome != self.drawing.monochrome
         self.drawing = drawing
         drawn = false
-        // A new placeholder waits for its frame; a new crop or look of the
-        // same one keeps what it shows until the next.
+        // A new placeholder waits for its frame; a new speed of the same
+        // one keeps what it shows until the next.
         if restyled { isHidden = true }
         AvatarShaderRenderer.shared?.wake()
-        if drawsOnLayout { setNeedsLayout() }
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        if drawsOnLayout, !drawn { AvatarShaderRenderer.shared?.drawNow(self) }
     }
 
     override func didMoveToWindow() {
@@ -134,8 +106,6 @@ final class AvatarShaderRenderer {
     static var framesPerSecond = AvatarShader.framesPerSecond
     /// The most pixels across a placeholder is drawn at.
     static let maxPixels = 512
-    /// The most pixels along the longer side of anything else.
-    static let maxCanvasPixels = 1024
 
     let device: MTLDevice
     private let queue: MTLCommandQueue
@@ -203,12 +173,6 @@ final class AvatarShaderRenderer {
         link?.isPaused = background
     }
 
-    /// Compiles the pipeline ahead of the first view, off the main thread,
-    /// so the first header draws on its first frame.
-    func warm() {
-        if pipeline == nil { compile() }
-    }
-
     /// Compiles the pipeline if it isn't, and runs the link while any
     /// placeholder is in a window.
     func wake() {
@@ -242,7 +206,6 @@ final class AvatarShaderRenderer {
             let made = await self?.compiling?.value
             guard let self, let made else { return }
             pipeline = made
-            for view in views.allObjects where view.drawsOnLayout { view.setNeedsLayout() }
             wake()
         }
     }
@@ -264,11 +227,6 @@ final class AvatarShaderRenderer {
         wake()
     }
 
-    /// Whether `view` moves now: the system allows it, and the setting does
-    /// when it follows it.
-    private static func moves(_ view: LiveAvatarView) -> Bool {
-        animates && (!view.drawing.followsSetting || LiveAvatars.isEnabled)
-    }
 
     fileprivate func tick() {
         let all = views.allObjects
@@ -285,18 +243,7 @@ final class AvatarShaderRenderer {
             view.drawn = false
             view.isHidden = true
         }
-        draw(live.filter { Self.moves($0) || !$0.drawn }, pipeline: pipeline)
-    }
-
-    /// `view`'s first frame, now, in the current transaction; nothing until
-    /// the pipeline is compiled (then it lays out again).
-    func drawNow(_ view: LiveAvatarView) {
-        guard let pipeline, !background, Self.isShowing(view) else {
-            wake()
-            return
-        }
-        draw([view], pipeline: pipeline)
-        wake()
+        draw(live.filter { Self.animates || !$0.drawn }, pipeline: pipeline)
     }
 
     /// A first frame is presented with the transaction it was laid out in,
@@ -320,7 +267,8 @@ final class AvatarShaderRenderer {
         var drawables: [(LiveAvatarView, CAMetalDrawable)] = []
         for view in due {
             guard let frame = Self.frame(view, now: now) else { continue }
-            if view.metalLayer.drawableSize != frame.size { view.metalLayer.drawableSize = frame.size }
+            let size = CGSize(width: frame.pixels, height: frame.pixels)
+            if view.metalLayer.drawableSize != size { view.metalLayer.drawableSize = size }
             view.metalLayer.presentsWithTransaction = inTransaction
             guard let drawable = view.metalLayer.nextDrawable() else { continue }
             Self.encode(buffer, pipeline: pipeline, into: drawable.texture, frame: frame)
@@ -365,33 +313,21 @@ final class AvatarShaderRenderer {
 
     /// One frame's inputs, in pixels.
     struct Frame {
-        var size: CGSize
+        var pixels: Int
         var parameters: AvatarShader.Parameters
-        var drawing: ShaderDrawing
+        var monochrome: Bool
         var time: Float
-        var origin: SIMD2<Float>
-        var canvas: SIMD2<Float>
     }
 
     private static func frame(_ view: LiveAvatarView, now: CFTimeInterval) -> Frame? {
-        let drawing = view.drawing
-        let bounds = view.bounds.size
-        guard bounds.width > 0, bounds.height > 0 else { return nil }
-        var perPoint = CGFloat(drawing.resolution ?? Float(min(view.window?.screen.scale ?? 3, 3)))
-        let cap = CGFloat(drawing.canvas == nil ? maxPixels : maxCanvasPixels)
-        perPoint = min(perPoint, cap / max(bounds.width, bounds.height))
-        let size = CGSize(width: max(1, (bounds.width * perPoint).rounded(.up)), height: max(1, (bounds.height * perPoint).rounded(.up)))
-        let parameters = AvatarShader.parameters(drawing.index)
-        let speed = drawing.speed ?? AvatarShader.speed(side: Float(max(bounds.width, bounds.height)))
-        let elapsed = moves(view) ? (now - view.started) * Double(speed) : 0
-        let canvas = drawing.canvas ?? (CGRect(origin: .zero, size: bounds), bounds)
-        let kx = size.width / bounds.width
-        return Frame(
-            size: size, parameters: parameters, drawing: drawing,
-            time: AvatarShader.time(parameters, elapsed: elapsed),
-            origin: SIMD2(Float(canvas.frame.minX * kx), Float(canvas.frame.minY * kx)),
-            canvas: SIMD2(Float(canvas.size.width * kx), Float(canvas.size.height * kx))
-        )
+        let side = max(view.bounds.width, view.bounds.height)
+        guard side > 0 else { return nil }
+        let scale = min(view.window?.screen.scale ?? 3, 3)
+        let pixels = min(maxPixels, Int((side * scale).rounded(.up)))
+        let parameters = AvatarShader.parameters(view.index)
+        let speed = view.drawing.speed ?? AvatarShader.speed(side: Float(side))
+        let elapsed = animates ? (now - view.started) * Double(speed) : 0
+        return Frame(pixels: pixels, parameters: parameters, monochrome: view.monochrome, time: AvatarShader.time(parameters, elapsed: elapsed))
     }
 
     private struct Uniforms {
@@ -405,13 +341,8 @@ final class AvatarShaderRenderer {
         var grain: Float
         var grainCell: Float
         var mono: Float
-        var origin: SIMD2<Float>
-        var canvas: SIMD2<Float>
-        var tint: SIMD4<Float>
-        var saturation: Float
-        var opacity: Float
-        var soften: Float
-        var pad: Float = 0
+        var size: SIMD2<Float>
+        var pad = SIMD2<Float>(0, 0)
     }
 
     private static func encode(_ buffer: MTLCommandBuffer, pipeline: MTLRenderPipelineState, into texture: MTLTexture, frame: Frame) {
@@ -425,7 +356,6 @@ final class AvatarShaderRenderer {
             let c = index < parameters.colors.count ? parameters.colors[index] : .zero
             return SIMD4(c, 1)
         }
-        let look = frame.drawing.look
         var uniforms = Uniforms(
             col1: color(0), col2: color(1), col3: color(2), col4: color(3),
             layout: parameters.layout,
@@ -433,16 +363,11 @@ final class AvatarShaderRenderer {
             t: frame.time,
             angle: parameters.angle,
             warp: AvatarShader.warp,
-            scale: AvatarShader.scale / frame.drawing.zoom,
-            grain: look.grain,
-            grainCell: AvatarShader.grainCell(pixels: Int(max(frame.size.width, frame.size.height))),
-            mono: frame.drawing.monochrome ? 1 : 0,
-            origin: frame.origin,
-            canvas: frame.canvas,
-            tint: SIMD4(look.tint, look.tintAmount),
-            saturation: look.saturation,
-            opacity: look.opacity,
-            soften: look.soften
+            scale: AvatarShader.scale,
+            grain: AvatarShader.grain,
+            grainCell: AvatarShader.grainCell(pixels: frame.pixels),
+            mono: frame.monochrome ? 1 : 0,
+            size: SIMD2(Float(frame.pixels), Float(frame.pixels))
         )
         encoder.setRenderPipelineState(pipeline)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
@@ -459,12 +384,7 @@ final class AvatarShaderRenderer {
         descriptor.storageMode = .shared
         guard let texture = device.makeTexture(descriptor: descriptor), let buffer = queue.makeCommandBuffer() else { return nil }
         let parameters = AvatarShader.parameters(index)
-        let side = SIMD2(Float(pixels), Float(pixels))
-        let frame = Frame(
-            size: CGSize(width: pixels, height: pixels), parameters: parameters,
-            drawing: ShaderDrawing(index: index, monochrome: monochrome),
-            time: time ?? parameters.phase, origin: .zero, canvas: side
-        )
+        let frame = Frame(pixels: pixels, parameters: parameters, monochrome: monochrome, time: time ?? parameters.phase)
         Self.encode(buffer, pipeline: pipeline, into: texture, frame: frame)
         await withCheckedContinuation { continuation in
             buffer.addCompletedHandler { _ in continuation.resume() }

@@ -574,9 +574,7 @@ final class SessionDetailViewController: UIViewController, UIGestureRecognizerDe
         case .clay(let slug): .clay(slug)
         default: nil
         }
-        let chat = ChatViewController(session: session, agentId: agentId, title: row.label, spaceId: row.spaceId, intro: intro)
-        if case .placeholder(let seed) = row.mark { chat.shaderSeed = seed }
-        navigationController?.pushViewController(chat, animated: true)
+        navigationController?.pushViewController(ChatViewController(session: session, agentId: agentId, title: row.label, spaceId: row.spaceId, intro: intro), animated: true)
     }
 
     private func openChild(_ children: [SessionDetail.Child]?, _ index: Int) {

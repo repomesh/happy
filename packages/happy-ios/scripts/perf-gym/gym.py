@@ -909,7 +909,7 @@ def main():
     p.add_argument("--images", help="the chat heavy with pictures"); p.add_argument("--paging", help="the chat paged in (default the long one)")
     p.add_argument("--iterations", type=int, default=1, help="XCTest metric iterations")
     p.add_argument("--no-prime", action="store_true", help="the chats are already read back to their first message")
-    p.add_argument("--live-avatars", action="store_true", help="Animated Avatars on: the chat header's shader moves")
+    p.add_argument("--live-avatars", action="store_true", help="Animated Avatars on: the avatars on screen move")
     p.add_argument("--avatar-fps", type=float, help="live avatars at this many frames a second")
     p.set_defaults(func=cmd_run)
     p = sub.add_parser("check"); p.add_argument("results"); p.add_argument("--budgets"); p.set_defaults(func=cmd_check)

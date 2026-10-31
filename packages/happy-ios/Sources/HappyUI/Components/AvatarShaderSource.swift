@@ -10,8 +10,7 @@
  * interaction, entrance or ring, so an avatar fills its square and its view
  * clips it; GLSL's smoothstep (which allows edges in either order) written
  * out; sin in `hash` precise, so the noise is the browser's; a Black & White
- * mode; a canvas a view crops, a softening, and a tint, fade and desaturation for
- * where it isn't an avatar (the chat header).
+ * mode.
  */
 #if canImport(UIKit)
 
@@ -30,13 +29,8 @@ struct Uniforms {
   float grain;
   float grainCell;
   float mono;       // 1 drains the colour
-  float2 origin;    // where this view sits in its canvas, device px
-  float2 canvas;    // the canvas the pattern spans, device px
-  float4 tint;      // rgb, and how far toward it (a)
-  float saturation; // 1 the shader's own colours, 0 grey
-  float opacity;
-  float soften;     // pattern units averaged over; 0, none
-  float pad;
+  float2 size;      // device px
+  float2 pad;
 };
 
 vertex float4 avatar_vertex(uint id [[vertex_id]]) {
@@ -191,27 +185,18 @@ float3 effect(float2 uv, float2 ua, constant Uniforms &u) {
 }
 
 fragment float4 avatar_fragment(float4 position [[position]], constant Uniforms &u [[buffer(0)]]) {
-  // A view is a window onto its canvas; an avatar is its own canvas.
-  float2 px = position.xy + u.origin;
-  float2 uv = (px - u.canvas * 0.5) / (u.canvas.x * u.scale) + 0.5;
+  float2 px = position.xy;
+  float r = u.size.x * 0.5;
+  float2 uv = (px - r) / (r * 2.0 * u.scale) + 0.5;
   // Each seed sees its own part of the pattern. Thermal only slides
   // sideways and zooms, so it stays upright.
   float2 ua = (uv - 0.5) / u.layout.w + 0.5 + float2(u.layout.x, 0.0);
   uv = rot2(uv - 0.5, u.layout.z) / u.layout.w + 0.5 + u.layout.xy;
   float3 c = effect(uv, ua, u);
-  if (u.soften > 0.0) {
-    // Four more taps around it: a held band's hard edges go soft.
-    float2 dx = float2(u.soften, 0.0), dy = float2(0.0, u.soften);
-    c += effect(uv + dx, ua + dx, u) + effect(uv - dx, ua - dx, u) + effect(uv + dy, ua + dy, u) + effect(uv - dy, ua - dy, u);
-    c /= 5.0;
-  }
   c += rfFilmGrain(px, c, u) * u.grain;
   c = clamp(c, 0.0, 1.0);
   if (u.mono > 0.5) c = float3(dot(c, float3(0.299, 0.587, 0.114)));
-  c = mix(float3(dot(c, float3(0.299, 0.587, 0.114))), c, u.saturation);
-  c = mix(c, u.tint.rgb, u.tint.a);
-  // Premultiplied, as Core Animation composites it.
-  return float4(c * u.opacity, u.opacity);
+  return float4(c, 1.0);
 }
 """
 #endif

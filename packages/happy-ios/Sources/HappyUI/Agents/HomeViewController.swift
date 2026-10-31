@@ -461,7 +461,6 @@ final class HomeViewController: UIViewController {
             session.warm.tap(agentId)
             let space = row.spaceId.flatMap { id in snapshotSpace(id) }
             let chat = ChatViewController(session: session, agentId: agentId, title: row.label, spaceId: row.spaceId, intro: space)
-            if case .placeholder(let seed) = row.mark { chat.shaderSeed = seed }
             navigationController?.pushViewController(chat, animated: animated)
         default:
             break

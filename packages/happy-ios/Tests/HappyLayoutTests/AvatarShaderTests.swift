@@ -75,24 +75,4 @@ final class AvatarShaderTests: XCTestCase {
         XCTAssertEqual(AvatarShader.grainCell(pixels: 144), 1)
         XCTAssertEqual(AvatarShader.grainCell(pixels: 1080), 2)
     }
-
-    /// The header's look is one of those compared, under the glass, washed
-    /// toward white in the light and black in the dark, slower than an
-    /// avatar and drawn below the screen's resolution.
-    func testTheChatHeadersLook() {
-        let chosen = ChatPillShader.chosen
-        XCTAssertTrue(ChatPillShader.candidates.contains { $0.style == chosen })
-        XCTAssertEqual(chosen.placement, .behindGlass)
-        XCTAssertEqual(chosen.look(dark: false).tint, SIMD3(1, 1, 1))
-        XCTAssertEqual(chosen.look(dark: true).tint, SIMD3(0, 0, 0))
-        for look in [chosen.light, chosen.dark] {
-            XCTAssert((0.5...0.8).contains(look.tintAmount))
-            XCTAssert((0...1).contains(look.saturation))
-            XCTAssertEqual(look.opacity, 1)
-            XCTAssertEqual(look.grain, 0)
-        }
-        XCTAssertGreaterThan(chosen.dark.tintAmount, chosen.light.tintAmount, "the dark needs more wash")
-        XCTAssert(chosen.speed < 1 && chosen.zoom < 1 && chosen.resolution < 1)
-        XCTAssertEqual(ShaderLook.avatar, ShaderLook(saturation: 1, tintAmount: 0, opacity: 1, grain: AvatarShader.grain, soften: 0))
-    }
 }

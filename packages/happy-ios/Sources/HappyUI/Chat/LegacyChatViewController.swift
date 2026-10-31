@@ -50,9 +50,6 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
     private let header = ChatHeaderView()
     private lazy var avatarControl = ChatHeaderAvatarControl()
     private lazy var avatarItem = UIBarButtonItem(customView: avatarControl)
-    /// The session's shader behind Back and Compose; the capsule's is the
-    /// title's own (`ChatPillShader`).
-    private lazy var barShaders = ChatBarShaders()
     /// The title on a tablet, without glass.
     private lazy var plainTitleView = ChatPlainHeaderTitleView()
     private lazy var cliWarning = ChatCliWarningPill()
@@ -243,10 +240,6 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
         sessionStatus = cached.map { SessionComposerView.headerStatus(record: $0, now: home?.presenceNow) }
         header.statuses = SessionComposerView.headerStatuses
         header.onOpen = { [weak self] in self?.openInfo() }
-        // The session's shader under the glass from the first frame.
-        header.shaderSeed = cached?.avatarSeed
-        barShaders.seed = cached?.avatarSeed
-        header.onLayout = { [weak self] in self?.barShaders.layout() }
         headerTitle = navigationItem.title ?? ""
         applyTitleAndStatus()
         navigationItem.titleView = header
@@ -482,7 +475,6 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         appeared = true
-        attachBarShaders()
         startConstruction()
         // An empty compose has no transcript to stage: built now, its
         // composer can take the keyboard while the push still runs.
@@ -776,7 +768,6 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        barShaders.detach(alongside: transitionCoordinator)
         if contentInstalled { keepStripOffset() }
         if ultraKeyboard?.isDriving == true { ultraKeyboard?.dismissImmediately() }
         // Screens pushed from here, and the one under it, have their bar.
@@ -789,7 +780,6 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        barShaders.layout()
         guard contentInstalled else { return }
         updateHeaderVisibility(animated: false)
         updateUltraKeyboard()
@@ -1076,17 +1066,6 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
         navigationItem.leftBarButtonItem = tablet ? switcher?.barItem : nil
         if contentInstalled { tabStrip.glass = !tablet } // TabletBranches.worktreeStripGlass
         floatingDockChanged()
-        attachBarShaders()
-    }
-
-    /// The phone's glass header wears the session's shader; a tablet's
-    /// plain one doesn't.
-    private func attachBarShaders() {
-        guard appeared, !isTabletLayout, navigationController?.topViewController === self, let bar = navigationController?.navigationBar else {
-            barShaders.detach(alongside: nil)
-            return
-        }
-        barShaders.attach(to: bar, alongside: transitionCoordinator)
     }
 
     /// The shell uses the chat's bar style from its first frame, before
@@ -1144,14 +1123,6 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
         let settings = session.settings
         avatarControl.isHidden = session.record == nil
         avatarControl.accessibilityLabel = title
-        // The header's glass wears the session's shader, grey with Black &
-        // White Avatars; not when offline, as the avatar is, so the header
-        // doesn't lose its colour each time the connection drops.
-        let monochrome = settings.avatarMonochrome
-        if let seed = session.record?.avatarSeed { header.shaderSeed = seed }
-        header.backdrop.monochrome = monochrome
-        barShaders.seed = header.shaderSeed
-        barShaders.monochrome = monochrome
         if let record = session.record {
             let metadata = record.metadata
             avatarControl.content = AvatarView.Content(

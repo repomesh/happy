@@ -24,11 +24,6 @@ with, made by the package's own `resolve` and `angleOf` for the seed and effect
 below (`scripts/generate-avatar-shader-table.mjs`). Both are under the same MIT
 license. At its phase the shader draws the picture's own frame.
 
-A chat's header draws the same shader under its glass, drained, washed
-toward white or black and cropped (`ChatPillShader` in
-`Sources/HappyLayout/ShaderLook.swift`); the port adds those steps after the
-package's own and changes nothing before them.
-
 | File | Seed | Effect |
 | --- | --- | --- |
 | `avatar-placeholder-001.webp` | `0b7ttho` | linear |

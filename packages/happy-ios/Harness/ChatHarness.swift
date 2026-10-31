@@ -1,7 +1,6 @@
 #if canImport(UIKit)
 import Foundation
 import HappyCore
-import HappyLayout
 @testable import HappyUI
 import UIKit
 
@@ -68,7 +67,6 @@ final class HarnessSceneDelegate: UIResponder, UIWindowSceneDelegate {
     private var homeScrollDiagnostic: HomeScrollDiagnosticHarness?
     private var groupedHome: GroupedHomeHarness?
     private var chatHeader: ChatHeaderHarness?
-    private var pillShaders: PillShaderHarness?
     private var avatarSpeeds: AvatarSpeedHarness?
     #endif
 
@@ -81,13 +79,6 @@ final class HarnessSceneDelegate: UIResponder, UIWindowSceneDelegate {
         self.window = window
         let arguments = ProcessInfo.processInfo.arguments
         #if DEBUG || HAPPY_FIXTURES
-        // `-pill N` draws chat headers with `ChatPillShader.candidates[N]`;
-        // `-live` turns Animated Avatars on, so they move.
-        if let pill = arguments.firstIndex(of: "-pill").flatMap({ arguments.indices.contains($0 + 1) ? Int(arguments[$0 + 1]) : nil }),
-           ChatPillShader.candidates.indices.contains(pill) {
-            GlassShaderBackdrop.defaultStyle = ChatPillShader.candidates[pill].style
-        }
-        if arguments.contains("-live") { LiveAvatars.isEnabled = true }
         if arguments.contains("-homeScrollDiagnostic") {
             homeScrollDiagnostic = HomeScrollDiagnosticHarness(window: window, arguments: arguments)
             return
@@ -127,10 +118,6 @@ final class HarnessSceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
         if let index = arguments.firstIndex(of: "-screen"), arguments.indices.contains(index + 1), arguments[index + 1] == "groupedHome" {
             groupedHome = GroupedHomeHarness(window: window, arguments: arguments)
-            return
-        }
-        if let index = arguments.firstIndex(of: "-screen"), arguments.indices.contains(index + 1), arguments[index + 1] == "pillShaders" {
-            pillShaders = PillShaderHarness(window: window, arguments: arguments)
             return
         }
         if let index = arguments.firstIndex(of: "-screen"), arguments.indices.contains(index + 1), arguments[index + 1] == "avatarSpeeds" {

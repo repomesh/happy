@@ -203,18 +203,6 @@ final class ChatViewController: UIViewController, ComposeHosting {
     /// The title in the navigation bar: the name, and the agent's status,
     /// on a glass capsule between the bar's own glass buttons.
     private let header = ChatHeaderView()
-    /// The chat's shader behind Back and Compose; the capsule's is the
-    /// header's own (`ChatPillShader`).
-    private let barShaders = ChatBarShaders()
-    /// What the header's shader is picked by: the chat's avatar's seed (its
-    /// row's placeholder), else the agent's ID.
-    var shaderSeed: String? {
-        get { header.shaderSeed }
-        set {
-            header.shaderSeed = newValue
-            barShaders.seed = newValue
-        }
-    }
     private var titleView: ChatTitleView { header.titleView }
 
     init(session: Session, agentId: String, title: String, spaceId: String?, intro: Intro?, newTask: NewTask? = nil, prefill: ChatPrefill? = nil, previewing: Bool = false) {
@@ -251,8 +239,6 @@ final class ChatViewController: UIViewController, ComposeHosting {
         self.title = title
         titleView.text = title
         header.resize()
-        if !previewing, !agentId.isEmpty { shaderSeed = agentId }
-        header.onLayout = { [weak self] in self?.barShaders.layout() }
         navigationItem.titleView = header
         navigationItem.largeTitleDisplayMode = .never
         // A new task's media is under the ID the computer gives it, once
@@ -416,7 +402,6 @@ final class ChatViewController: UIViewController, ComposeHosting {
         if !ownsKeyboard { keyboardTop = .greatestFiniteMagnitude }
         // Back from a screen over this one, or a swipe back let go of.
         updateBar(animated: animated)
-        if let bar = navigationController?.navigationBar { barShaders.attach(to: bar, alongside: transitionCoordinator) }
         let conversation = conversation
         Task { await conversation.setVisible(true) }
         // The model chip warns as its account runs low, so the readings are
@@ -458,7 +443,6 @@ final class ChatViewController: UIViewController, ComposeHosting {
         titleView.finishEditing()
         picker?.close(animated: false)
         giveBarBack(animated: animated)
-        barShaders.detach(alongside: transitionCoordinator)
         if !previewing {
             let conversation = conversation
             Task { await conversation.flushDraft() }
@@ -1234,7 +1218,6 @@ final class ChatViewController: UIViewController, ComposeHosting {
         }
         timeShown()
         header.maxWidth = ChatTitleLayout.maxWidth(barWidth: view.bounds.width)
-        barShaders.layout()
         // From where the keyboard rests, not the finger dragging it: the
         // card keeps its shape through a drag and changes once it settles.
         let compact = compacts
