@@ -378,17 +378,69 @@ extension AgentWire {
         /// follows the artifact; anything else is that version.
         public var version: Int?
         public var shows: String?
+        /// What a tool row names: an `exec_command`'s command, a
+        /// background terminal's input, a `search`'s query, an
+        /// `exploration`'s operations, a `file_diff`'s files and an
+        /// `agent_spawn`'s model.
+        public var command: String?
+        public var input: String?
+        public var query: String?
+        public var operations: [Operation]?
+        public var files: [DiffFile]?
+        public var model: SpawnModel?
+
+        /// One `exploration` step: `list` a `target`, `read` a `name`, or
+        /// `search` by `command`, with its `query` and `path` when known.
+        public struct Operation: Equatable, Sendable, Codable {
+            public var kind: String
+            public var name: String?
+            public var target: String?
+            public var command: String?
+            public var query: String?
+            public var path: String?
+
+            public init(kind: String, name: String? = nil, target: String? = nil, command: String? = nil, query: String? = nil, path: String? = nil) {
+                self.kind = kind; self.name = name; self.target = target; self.command = command; self.query = query; self.path = path
+            }
+        }
+
+        /// A `file_diff` file, without its hunks: `kind` is `add`,
+        /// `delete` or `update`.
+        public struct DiffFile: Equatable, Sendable, Codable {
+            public var path: String
+            public var kind: String
+            public var added: Int?
+            public var deleted: Int?
+
+            public init(path: String, kind: String, added: Int? = nil, deleted: Int? = nil) {
+                self.path = path; self.kind = kind; self.added = added; self.deleted = deleted
+            }
+        }
+
+        public struct SpawnModel: Equatable, Sendable, Codable {
+            public var name: String
+        }
+
+        public init(type: String, items: [MediaItem]? = nil, layout: JSONValue? = nil, artifactId: String? = nil, artifactType: String? = nil, title: String? = nil, version: Int? = nil, shows: String? = nil,
+                    command: String? = nil, input: String? = nil, query: String? = nil, operations: [Operation]? = nil, files: [DiffFile]? = nil, model: SpawnModel? = nil) {
+            self.type = type; self.items = items; self.layout = layout; self.artifactId = artifactId; self.artifactType = artifactType
+            self.title = title; self.version = version; self.shows = shows
+            self.command = command; self.input = input; self.query = query; self.operations = operations; self.files = files; self.model = model
+        }
     }
 
     public enum Block: Equatable, Sendable, Codable {
         case text(String)
         case reasoning(String)
         case image(mimeType: String, data: String)
-        /// A tool call, kept only for what it showed the person.
-        case toolCall(id: String, name: String, status: String, presentation: Presentation?)
+        /// A tool call: its row, and what it showed the person. Only a
+        /// question (`request_user_input`) keeps its raw `arguments` and
+        /// result `output`, which say what was asked and answered.
+        case toolCall(id: String, name: String, status: String, presentation: Presentation?, arguments: JSONValue? = nil, output: String? = nil)
         case unknown(String)
 
-        enum CodingKeys: String, CodingKey { case type, text, mimeType, data, id, name, status, presentation }
+        enum CodingKeys: String, CodingKey { case type, text, mimeType, data, id, name, status, presentation, arguments, result }
+        enum ResultKeys: String, CodingKey { case output }
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             let type = try container.decode(String.self, forKey: .type)
@@ -401,10 +453,15 @@ extension AgentWire {
                     self = .image(mimeType: mimeType, data: data)
                 } else { self = .unknown(type) }
             case "tool_call":
+                let name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+                let asks = name == Question.toolName
+                let result = asks ? try? container.nestedContainer(keyedBy: ResultKeys.self, forKey: .result) : nil
                 self = .toolCall(
-                    id: try container.decode(String.self, forKey: .id), name: try container.decodeIfPresent(String.self, forKey: .name) ?? "",
+                    id: try container.decode(String.self, forKey: .id), name: name,
                     status: try container.decodeIfPresent(String.self, forKey: .status) ?? "running",
-                    presentation: try? container.decodeIfPresent(Presentation.self, forKey: .presentation)
+                    presentation: try? container.decodeIfPresent(Presentation.self, forKey: .presentation),
+                    arguments: asks ? (try? container.decodeIfPresent(JSONValue.self, forKey: .arguments)) ?? nil : nil,
+                    output: (try? result?.decodeIfPresent(String.self, forKey: .output)) ?? nil
                 )
             default: self = .unknown(type)
             }
@@ -416,9 +473,14 @@ extension AgentWire {
             case .reasoning(let text): try container.encode("reasoning", forKey: .type); try container.encode(text, forKey: .text)
             case .image(let mimeType, let data):
                 try container.encode("image", forKey: .type); try container.encode(mimeType, forKey: .mimeType); try container.encode(data, forKey: .data)
-            case .toolCall(let id, let name, let status, let presentation):
+            case .toolCall(let id, let name, let status, let presentation, let arguments, let output):
                 try container.encode("tool_call", forKey: .type); try container.encode(id, forKey: .id); try container.encode(name, forKey: .name)
                 try container.encode(status, forKey: .status); try container.encodeIfPresent(presentation, forKey: .presentation)
+                try container.encodeIfPresent(arguments, forKey: .arguments)
+                if let output {
+                    var result = container.nestedContainer(keyedBy: ResultKeys.self, forKey: .result)
+                    try result.encode(output, forKey: .output)
+                }
             case .unknown(let type): try container.encode(type, forKey: .type)
             }
         }
@@ -468,7 +530,57 @@ extension AgentWire {
         public var status: String
         /// Unix milliseconds; the turn's clock counts from here.
         public var startedAt: Double?
+        /// When it ended, and why: `completed`, `steering`, `abort` or
+        /// `error`; nil while it runs.
+        public var endedAt: Double?
+        public var reason: String?
         public var messages: [Message]?
+
+        public init(id: String, status: String, startedAt: Double? = nil, endedAt: Double? = nil, reason: String? = nil, messages: [Message]? = nil) {
+            self.id = id; self.status = status; self.startedAt = startedAt; self.endedAt = endedAt; self.reason = reason; self.messages = messages
+        }
+    }
+
+    /// A question the agent asked (`GET /v0/agents/:id/question`,
+    /// `question.*` events): one or more prompts answered together, each
+    /// by option labels or free text.
+    public struct Question: Equatable, Sendable, Codable {
+        /// The tool that asks it, whose call ID is the question's.
+        public static let toolName = "request_user_input"
+
+        public struct Option: Equatable, Sendable, Codable {
+            public var label: String
+            public var description: String?
+
+            public init(label: String, description: String? = nil) {
+                self.label = label; self.description = description
+            }
+        }
+
+        public struct Prompt: Equatable, Sendable, Codable {
+            public var id: String
+            public var header: String?
+            public var question: String
+            public var multiSelect: Bool?
+            public var options: [Option]?
+
+            public init(id: String, header: String? = nil, question: String, multiSelect: Bool? = nil, options: [Option]? = nil) {
+                self.id = id; self.header = header; self.question = question; self.multiSelect = multiSelect; self.options = options
+            }
+        }
+
+        public var id: String
+        public var agentId: String?
+        public var runId: String?
+        /// `pending`, `answered` or `canceled`.
+        public var status: String
+        public var questions: [Prompt]
+        /// Each prompt's values by its ID, once answered.
+        public var answers: [String: [String]]?
+
+        public init(id: String, agentId: String? = nil, runId: String? = nil, status: String = "pending", questions: [Prompt], answers: [String: [String]]? = nil) {
+            self.id = id; self.agentId = agentId; self.runId = runId; self.status = status; self.questions = questions; self.answers = answers
+        }
     }
 
     public struct MessagesResponse: Equatable, Sendable, Codable {

@@ -70,8 +70,13 @@ actor ChatPlanner {
         if case .collaborator(let agentId, let explanation) = item.role {
             return collaborator(item, agentId: agentId, explanation: explanation, key: key, opened: opened, syntax: syntax)
         }
-        if case .failure(let failure) = item.role {
-            return Self.failure(failure, id: item.id, key: key, syntax: syntax)
+        switch item.role {
+        case .failure(let failure): return Self.failure(failure, id: item.id, key: key, syntax: syntax)
+        case .tool(let tool): return Self.tool(tool, id: item.id, key: key)
+        case .turnEnd(let ended): return Self.turnEnd(ended, id: item.id, key: key, copied: copied)
+        case .trace(let trace): return Self.trace(trace, id: item.id, key: key)
+        case .question(let ask): return Self.question(ask, id: item.id, key: key)
+        default: break
         }
         guard !item.pieces.isEmpty else { return ChatRowPlan(id: item.id, size: CGSize(width: width, height: 0), items: []) }
         typealias M = MessageLayout.Metrics
@@ -264,7 +269,7 @@ actor ChatPlanner {
             let alpha: CGFloat = !rings && (item.delivery == .sending || item.delivery == .pending) ? 0.6 : 1
             let label = [text, failure ? Strings.sendFailed : ""].filter { !$0.isEmpty }.joined(separator: ", ")
             return ChatRowPlan(id: item.id, size: layout.size, items: items, hits: hits, alpha: alpha, accessibilityLabel: label, toggles: layout.foldControl == nil ? nil : toggles)
-        case .collaborator, .failure:
+        case .collaborator, .failure, .tool, .turnEnd, .trace, .question:
             // Planned above.
             return ChatRowPlan(id: item.id, size: CGSize(width: width, height: 0), items: [])
         }

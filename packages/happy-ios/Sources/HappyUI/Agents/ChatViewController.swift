@@ -80,7 +80,7 @@ final class ChatViewController: UIViewController, ComposeHosting {
     private var spareRows: [ChatPlanView] = []
     /// The proposal cards each row on screen hosts.
     private var rowCards: [String: Set<String>] = [:]
-    private var plans: [ChatRowPlan] = []
+    private(set) var plans: [ChatRowPlan] = []
     private var plansById: [String: ChatRowPlan] = [:]
     /// The plans' rows as last laid out, top to bottom: their ids, their
     /// frames, and where each id is in them.
@@ -103,7 +103,7 @@ final class ChatViewController: UIViewController, ComposeHosting {
     /// Desktop's way back to the newest message.
     private let jump = ChatJumpButton()
     private var jumpShown = false
-    private let card = AgentInputCardView(configuration: AgentInputCardConfiguration(placeholder: Strings.Composer.inputPlaceholder))
+    let card = AgentInputCardView(configuration: AgentInputCardConfiguration(placeholder: Strings.Composer.inputPlaceholder))
     /// How much of the context window the conversation has spent, under
     /// the card at its far end, as desktop's under its composer.
     let meter = ContextMeterView()
@@ -128,6 +128,14 @@ final class ChatViewController: UIViewController, ComposeHosting {
     /// Other agents' messages, and the person's long ones, opened to read,
     /// for this screen's life.
     private var opened = Set<String>()
+    /// Finished turns opened on their work ("View traces"), by run, for
+    /// this screen's life: every other finished turn is folded.
+    private var expandedTurns = Set<String>()
+    /// A turn was opened or folded: the next apply moves rows in place,
+    /// the rows the reader sees staying where they are.
+    private var foldMoved = false
+    /// Each waiting question's ticked options, by question and prompt.
+    private var picks: [String: [String: [String]]] = [:]
     /// The sidebar proposals the transcript shows, and their cards by row.
     private let proposals: SidebarProposals
     private var proposalViews: [String: SidebarProposalView] = [:]
@@ -909,12 +917,73 @@ final class ChatViewController: UIViewController, ComposeHosting {
         }
     }
 
+    /// The conversation as the transcript shows it: each finished turn
+    /// folded unless opened, a waiting question with what is ticked.
+    private var shownItems: [ChatItem] {
+        var items = chat.items
+        if !picks.isEmpty {
+            for index in items.indices {
+                guard case .question(var ask) = items[index].role, let picked = picks[ask.question.id] else { continue }
+                ask.picked = picked
+                items[index].role = .question(ask)
+            }
+        }
+        return TurnFold.fold(items, expanded: expandedTurns)
+    }
+
+    /// The question waiting on the person, with what is ticked.
+    private var waitingQuestion: ChatItem.Ask? {
+        for item in chat.items.reversed() {
+            guard case .question(var ask) = item.role, ask.phase != .answered else { continue }
+            ask.picked = picks[ask.question.id] ?? [:]
+            return ask
+        }
+        return nil
+    }
+
+    /// Opens a finished turn on its work, or folds it again, the rows the
+    /// reader is looking at staying where they are.
+    private func toggleTurn(_ turn: String) {
+        if expandedTurns.remove(turn) == nil { expandedTurns.insert(turn) }
+        followsNewest = false
+        foldMoved = true
+        replan()
+    }
+
+    /// Ticks or unticks an option of the waiting question.
+    private func pick(questionId: String, promptId: String, option: Int) {
+        guard let ask = waitingQuestion, ask.question.id == questionId, ask.phase != .submitting,
+              let options = ask.question.questions.first(where: { $0.id == promptId })?.options, options.indices.contains(option) else { return }
+        let label = options[option].label
+        UISelectionFeedbackGenerator().selectionChanged()
+        picks[questionId] = ask.picking(label, in: promptId)
+        replan()
+    }
+
+    /// Sends what is ticked; the answer stands once the computer takes it.
+    private func submit(questionId: String) {
+        guard let ask = waitingQuestion, ask.question.id == questionId, ask.complete else { return }
+        let conversation = conversation
+        Task { await conversation.answer(ask.picked) }
+    }
+
     /// Plans the rows off the main thread, then shows them in one frame.
     private func replan() {
         let key = planKey
         // Nothing is planned from history not yet read.
         guard key.width > 0, !reading(chat) else { return }
-        let items = chat.items
+        // Ticks outlive only the question they were for.
+        if !picks.isEmpty {
+            let waiting = waitingQuestion?.question.id
+            picks = picks.filter { $0.key == waiting }
+        }
+        let items = shownItems
+        // A turn that just ended folds its work away in place.
+        if let before = planned?.items {
+            let ended = Set(before.compactMap { if case .turnEnd = $0.role { $0.id } else { nil } })
+            let newest = items.last { $0.turn != nil }?.turn
+            if items.contains(where: { if case .turnEnd = $0.role { !ended.contains($0.id) && $0.turn == newest } else { false } }) { foldMoved = true }
+        }
         // Only words not looked through yet, as of what references read as
         // now: a long conversation isn't read again on every layout pass.
         if scanned.references != references { scanned = (references, [:]) }
@@ -960,7 +1029,7 @@ final class ChatViewController: UIViewController, ComposeHosting {
         planning?.cancel()
         // Rows as they stand untouched are shared with the warm chat: taken
         // from it as it laid them out ahead, and left with it for the next open.
-        let untouched = !previewing && copiedId == nil && opened.isEmpty && shown.isEmpty
+        let untouched = !previewing && copiedId == nil && opened.isEmpty && shown.isEmpty && expandedTurns.isEmpty && picks.isEmpty
         if untouched, let ahead = warm?.chat.plans(for: items, key: key) {
             planning = nil
             shownProposals = shown
@@ -1287,7 +1356,9 @@ final class ChatViewController: UIViewController, ComposeHosting {
                 introView.place(introLayout)
                 opening = (view: introView, height: introLayout.size.height)
             }
-            ultra.apply(settled + waiting, intro: opening, animated: wasTaken)
+            let folds = foldMoved && view.window != nil
+            foldMoved = false
+            ultra.apply(settled + waiting, intro: opening, animated: wasTaken, moves: folds)
             updateJump()
             return
         }
@@ -1527,6 +1598,19 @@ final class ChatViewController: UIViewController, ComposeHosting {
         let picked = pictures.images.map(\.attachment)
         let pickedIDs = pictures.images.map(\.id)
         guard !text.isEmpty || !picked.isEmpty else { return }
+        // A question waiting takes what is typed as its answer, as on
+        // desktop: each prompt its ticked options, else the words. Words
+        // no prompt needed still go as a message.
+        if let ask = waitingQuestion, ask.phase != .submitting, !text.isEmpty {
+            let (answers, textUsed) = ask.answers(typed: text)
+            let conversation = conversation
+            Task { await conversation.answer(answers) }
+            if textUsed {
+                Haptics.play(.send)
+                card.setText("", selection: NSRange(location: 0, length: 0))
+                return
+            }
+        }
         acceptingSend = true
         Haptics.play(.send)
         // A reader at or near the end follows it there; one reading further
@@ -1722,7 +1806,7 @@ final class ChatViewController: UIViewController, ComposeHosting {
     }
 
     /// What a tap on a row's action does, from either transcript.
-    private func act(_ action: ChatRowAction) {
+    func act(_ action: ChatRowAction) {
         switch action {
         case .copyMessage(let id, let text):
             UIPasteboard.general.string = text
@@ -1749,6 +1833,12 @@ final class ChatViewController: UIViewController, ComposeHosting {
             navigationController?.pushViewController(ArtifactViewController(session: session, artifact: artifact), animated: true)
         case .toggleTool(let messageId):
             toggle(messageId)
+        case .toggleTurn(let turn):
+            toggleTurn(turn)
+        case .questionOption(let questionId, let promptId, let option):
+            pick(questionId: questionId, promptId: promptId, option: option)
+        case .questionSubmit(let questionId):
+            submit(questionId: questionId)
         default:
             break
         }

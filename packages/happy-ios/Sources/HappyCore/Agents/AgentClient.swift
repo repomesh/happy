@@ -403,6 +403,24 @@ public final class AgentClient: Sendable {
         return try await decode(Response.self, "POST", path, json: .object(body)).message
     }
 
+    /// The question the agent is waiting on, or nil when none is.
+    public func question(_ agentId: String) async throws -> AgentWire.Question? {
+        struct Response: Decodable { var question: AgentWire.Question? }
+        return try await decode(Response.self, "GET", "/v0/agents/\(Self.escape(agentId))/question").question
+    }
+
+    /// Answers a question: each prompt's option labels or typed text, by
+    /// its ID. The first answer wins; a late one is refused with the
+    /// question as it now stands.
+    public func answerQuestion(_ agentId: String, questionId: String, answers: [String: [String]], mutationId: String) async throws -> AgentWire.Question {
+        struct Response: Decodable { var question: AgentWire.Question }
+        let body: JSONValue = .object([
+            "answers": .object(answers.mapValues { .array($0.map(JSONValue.string)) }),
+            "mutationId": .string(mutationId),
+        ])
+        return try await decode(Response.self, "POST", "/v0/agents/\(Self.escape(agentId))/question/\(Self.escape(questionId))/answer", json: body).question
+    }
+
     public func markRead(_ agentId: String) async throws {
         _ = try await send("POST", "/v0/agents/\(Self.escape(agentId))/read", json: .object([:]))
     }

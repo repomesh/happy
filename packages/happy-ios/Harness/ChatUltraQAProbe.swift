@@ -1068,6 +1068,7 @@ final class ChatUltraQAProbe: NSObject {
         case .toggleDownload(let id): "download:\(id)"
         case .cancelUpload(let messageId, let piece): "cancelUpload:\(messageId):\(piece)"
         case .openArtifact(let artifact): "artifact:\(artifact.id)"
+        case .toggleTurn(let turn): "turn:\(turn)"
         case .copyMenu: "copyMenu"
         case .selectable: "selectable"
         case .markdownSelectable: "markdownSelectable"

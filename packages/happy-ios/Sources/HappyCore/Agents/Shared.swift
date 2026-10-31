@@ -65,7 +65,7 @@ public struct Shared: Equatable, Sendable {
     static func of(item: ChatItem) -> Shared {
         var shared = Shared()
         switch item.role {
-        case .collaborator, .failure: return shared
+        case .collaborator, .failure, .tool, .turnEnd, .question, .trace: return shared
         case .user, .agent: break
         }
         var media: [Media] = []
@@ -122,7 +122,7 @@ public struct Shared: Equatable, Sendable {
                 case .image(let mimeType, let data):
                     if let bytes = Data(base64Encoded: data) { media.append(.picture(id: pictureId(message.id, pictures), mimeType: mimeType, data: bytes)) }
                     pictures += 1
-                case .toolCall(let id, _, _, let presentation):
+                case .toolCall(let id, _, _, let presentation, _, _):
                     guard let presentation, presentation.type == "media" else { continue }
                     media += (presentation.items ?? []).enumerated().map { .tool(HappyCore.Media(toolCallId: id, index: $0.offset, item: $0.element)) }
                 case .reasoning, .unknown:

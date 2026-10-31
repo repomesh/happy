@@ -218,6 +218,8 @@ enum ChatRowAction: Equatable, Sendable {
     case toggleDownload(String)
     /// A V2 artifact's card.
     case openArtifact(Artifact)
+    /// A finished V2 turn's "View traces" / "Hide traces", by its run.
+    case toggleTurn(String)
 
     // Long presses
 

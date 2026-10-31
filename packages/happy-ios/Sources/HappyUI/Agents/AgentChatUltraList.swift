@@ -122,7 +122,10 @@ final class AgentChatUltraList: UIView {
     /// The intro goes in last, which is at the top: where the mounted
     /// transcript puts it, scrolling away as the rows under it fill the
     /// screen (`ChatStackLayout(pinsFirst:)`).
-    func apply(_ plans: [ChatRowPlan], intro: (view: UIView, height: CGFloat)? = nil, animated: Bool = false) {
+    /// `animated` eases rows in while the newest is followed; `moves` eases
+    /// a turn opening or folding wherever the reader is, the rows they see
+    /// staying put.
+    func apply(_ plans: [ChatRowPlan], intro: (view: UIView, height: CGFloat)? = nil, animated: Bool = false, moves: Bool = false) {
         var items: [any ListRow] = []
         var next: [String: AgentChatRow] = [:]
         var places: [String: CGFloat] = [:]
@@ -155,7 +158,7 @@ final class AgentChatUltraList: UIView {
                           newInsets: .init(top: insets.top, bottom: insets.bottom),
                           scrollTo: follows ? .init(index: 0, identity: items.first?.identity) : nil,
                           anchorMode: .preserveVisibleContent,
-                          transition: animated && follows && !UIAccessibility.isReduceMotionEnabled ? .easeInOut(0.2) : .none)
+                          transition: (animated && follows || moves) && !UIAccessibility.isReduceMotionEnabled ? .easeInOut(0.2) : .none)
     }
 
     func scrollToNewest(animated: Bool) {
