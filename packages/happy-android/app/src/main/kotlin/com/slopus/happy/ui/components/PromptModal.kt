@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.slopus.happy.R
+import com.slopus.happy.ui.layout.ContentTokens
 
 object PromptTags {
     const val CONTAINER = "prompt.container"
@@ -93,7 +94,7 @@ fun PromptModal(prompt: Prompt, onDismiss: () -> Unit) {
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 6.dp,
-            modifier = Modifier.padding(horizontal = 24.dp).widthIn(min = 280.dp, max = 560.dp).testTag(PromptTags.CONTAINER),
+            modifier = Modifier.padding(horizontal = 24.dp).widthIn(min = 280.dp, max = ContentTokens.dialogMaxWidth).testTag(PromptTags.CONTAINER),
         ) {
             Column(Modifier.padding(24.dp)) {
                 Text(

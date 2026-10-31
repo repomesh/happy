@@ -259,10 +259,10 @@ class HomeDockTest {
         }
         rule.onNodeWithText("Start New Session").assertIsDisplayed()
         val header = rule.node(HeaderTags.BAR).bounds
-        // new/index.tsx's header: a 24 chevron-back in a 48 target 16 in, the title start-aligned 8 after it.
+        // new/index.tsx's header: a 24 chevron-back in a 48 target 4 in, so the glyph is on the 16 keyline; the title 8 after it.
         val back = rule.node(NewSessionTags.BACK).bounds
-        assertBox("back", back, 16.dp, back.top, 48.dp, 48.dp)
-        assertDp("title after the back", 16 + 48 + 8, rule.node(NewSessionTags.TITLE).bounds.left)
+        assertBox("back", back, 4.dp, back.top, 48.dp, 48.dp)
+        assertDp("title after the back", 4 + 48 + 8, rule.node(NewSessionTags.TITLE).bounds.left)
         rule.node(NewSessionTags.BACK).performClick()
         assertEquals(1, backs)
         backs = 0

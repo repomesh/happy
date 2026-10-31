@@ -106,13 +106,15 @@ class ConversationLayoutTest {
 
     @Test
     @Config(qualifiers = "w900dp-h731dp-xhdpi")
-    fun `at 900 the composer is held to the messages' 800 column and the bar is not`() {
+    fun `at 900 the composer and the bar are held to the messages' 800 column`() {
         val state = ConversationState(created = true, loaded = true, rows = history, agent = agent, mode = mode)
         rule.setHappyContent { ProvideWindowLayout { ConversationScreen(state, null, ConversationScreenActions()) } }
         val composer = rule.node(ConversationComposerTags.COMPOSER).bounds
         assertDp("composer width", 800, composer.width)
         assertDp("composer centred", 50, composer.left)
-        assertDp("bar full width", 900, rule.node(ConversationScreenTags.BAR).bounds.width)
+        // The bar too, so its glyphs sit on the messages' keyline; its glass still spans the window.
+        assertDp("bar on the column", 800, rule.node(ConversationScreenTags.BAR).bounds.width)
+        assertDp("bar centred", 50, rule.node(ConversationScreenTags.BAR).bounds.left)
     }
 
     @Test fun `an opened chat has home's name from its first frame, and is never called New chat`() {

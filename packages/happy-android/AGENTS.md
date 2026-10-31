@@ -74,10 +74,19 @@ architectures comparable (local store, delta sync, crypto layer).
    its font, where RN converts the line height separately, so at large
    scales our lines run a few dp taller.
    **Tablet:** `ui/layout/WindowLayout.kt` answers responsive.ts and
-   layout.ts through `LocalWindowLayout` (the tablet shell is width ≥ 768;
-   the 9-inch diagonal only sets the 800 content max width). Read it, not
-   `LocalConfiguration`, for any `useIsTablet` branch; hold wide content with
-   `Modifier.contentMaxWidth` or `CenteredInputWidth`. `ui/tablet/TabletShell`
+   layout.ts through `LocalWindowLayout` (the tablet shell is width ≥ 768).
+   Read it, not `LocalConfiguration`, for any `useIsTablet` branch.
+   **Horizontal layout is one token set by Material width class**
+   (`ContentTokens`, research/foldable-layout.md): compact (< 600) 16 margin
+   and no cap, exactly the phone; medium (600–839, the Fold's inner screen)
+   24 margin and a 640 measure; expanded 24 and 768 (the 800 column). Hold
+   every content column with `Modifier.contentMaxWidth` (or
+   `CenteredInputWidth`) *before* its own 16 inset, so cards, rows, message
+   text and the bars' glyphs share one keyline per side. Top bars sit on the
+   same column with 48 targets 4 in, so a 24 glyph's edge is on the keyline;
+   never pad a bar control from the outside. Dialogs take
+   `ContentTokens.dialogMaxWidth`, sheets `sheetMaxWidth`.
+   `ui/layout/FoldableLayoutTest` checks screens at 411, 750 and 1280. `ui/tablet/TabletShell`
    wraps HappyApp's NavHost; under it `LocalTabletShell` is true and
    `HeaderBackButton` renders nothing. Tablet tests use
    `w1280dp-h800dp-xhdpi`; without `ProvideWindowLayout` a composable lays

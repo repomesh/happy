@@ -205,10 +205,9 @@ fun ChatComposer(
     Column(
         modifier = modifier
             .testTag(ComposerTags.COMPOSER)
-            .fillMaxWidth()
-            .padding(horizontal = ComposerSpec.containerPaddingHorizontal, vertical = ComposerSpec.containerPaddingVertical)
-            // `innerContainer`: held to layout.maxWidth, centred.
-            .contentMaxWidth(layout),
+            // `innerContainer`: on the content column, then its own inset, so the panel lines up with the messages.
+            .contentMaxWidth(layout)
+            .padding(horizontal = ComposerSpec.containerPaddingHorizontal, vertical = ComposerSpec.containerPaddingVertical),
     ) {
         Box(Modifier.fillMaxWidth().height(0.dp).wrapContentHeight(Alignment.Bottom, unbounded = true)) { overlay() }
         if (status != null) AnimatedFade(showDetails) {

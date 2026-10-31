@@ -80,6 +80,8 @@ object HomeTags {
     const val DAY_HEADER = "home.dayHeader"
     const val EMPTY = "home.empty"
     const val SHOW_ARCHIVED = "home.showArchived"
+    /** Every row in a card: its column, the card [HomeCardSpec.inset] in from it. */
+    const val CARD_ROW = "home.cardRow"
 }
 
 /** MainView.tsx and SessionsList.tsx on a phone. */
@@ -304,14 +306,14 @@ private fun HomeCardItem(entry: HomeCardEntry, callbacks: HomeListCallbacks) {
     val place = entry.place
     when (val row = entry.row) {
         is HomeRow.Chat -> if (place != null) {
-            HomeCardRow(place, FlatRowSpec.cardRowHeight(), FlatRowSpec.paddingLeft + FlatRowSpec.cardAvatar + FlatRowSpec.avatarGap) {
+            HomeCardRow(place, FlatRowSpec.cardRowHeight(), FlatRowSpec.paddingLeft + FlatRowSpec.cardAvatar + FlatRowSpec.avatarGap, tag = HomeTags.CARD_ROW) {
                 FlatSessionRow(row.row, showBorder = false, archived = row.archived, callbacks = callbacks, carded = true)
             }
         }
         is HomeRow.ArchiveToggle -> ArchiveToggleRow(row.hidden, row.banded, callbacks, carded = true)
         is HomeRow.DayHeader -> Unit
         is HomeRow.Project -> if (place != null) {
-            HomeCardRow(place, ProjectListSpec.cardRowHeight(row.row), ProjectListSpec.nameX) {
+            HomeCardRow(place, ProjectListSpec.cardRowHeight(row.row), ProjectListSpec.nameX, tag = HomeTags.CARD_ROW) {
                 ProjectHomeRowContent(row.row, callbacks, carded = true)
             }
         } else {

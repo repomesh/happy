@@ -85,10 +85,10 @@ class WindowLayoutTest {
         assertTrue(tablet.isLandscape)
         assertEquals(64.dp, tablet.headerHeight)
 
-        // A window narrower than the cap keeps its own width, so nothing is held in.
+        // A compact window has no cap: nothing is held in.
         val phone = WindowLayout.of(411.dp, 891.dp)
         assertEquals(DeviceType.Phone, phone.deviceType)
-        assertEquals(411.dp, phone.contentMaxWidth)
+        assertEquals(androidx.compose.ui.unit.Dp.Infinity, phone.contentMaxWidth)
         assertFalse(phone.isTablet)
         assertEquals(64.dp, phone.headerHeight)
 

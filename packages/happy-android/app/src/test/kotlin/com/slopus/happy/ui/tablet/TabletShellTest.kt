@@ -39,6 +39,7 @@ import kotlinx.serialization.json.put
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import com.slopus.happy.ui.layout.ContentTokens
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -257,13 +258,14 @@ class TabletShellTest {
     // The same foldable upright, 673 wide, and a phone: no shell, the phone home.
     @Test
     @Config(qualifiers = "w673dp-h841dp-xhdpi")
-    fun foldablePortraitIsAPhone() = assertPhoneHome()
+    fun foldablePortraitIsAPhone() = assertPhoneHome(ContentTokens.Medium.keyline(673.dp))
 
     @Test
     @Config(qualifiers = PHONE)
-    fun phoneIsUnchanged() = assertPhoneHome()
+    fun phoneIsUnchanged() = assertPhoneHome(HomeCardSpec.inset)
 
-    private fun assertPhoneHome() {
+    /** The phone's home, its rows' cards [cardInset] in: 16 on a phone, Material's 24 margin on a medium window. */
+    private fun assertPhoneHome(cardInset: androidx.compose.ui.unit.Dp) {
         session("a", 200)
         signIn()
         waitFor(FlatRowTags.ROW)
@@ -271,7 +273,7 @@ class TabletShellTest {
         rule.onAllNodesWithTag(TabletShellTags.HEADER, useUnmergedTree = true).assertCountEquals(0)
         rule.node(AccountMenuTags.BUTTON).assertExists()
         rule.node(HomeTags.COMPOSE).assertExists()
-        assertDp("home row inset in its card", HomeCardSpec.inset, rule.node(FlatRowTags.ROW).bounds.left)
+        assertDp("home row inset in its card", cardInset, rule.node(FlatRowTags.ROW).bounds.left)
         rule.node(FlatRowTags.ROW).performClick()
         waitFor(ChatScreenTags.SCREEN)
         assertDp("the chat keeps its back button", 48, rule.node(HeaderTags.LEFT).bounds.let { it.right - it.left })

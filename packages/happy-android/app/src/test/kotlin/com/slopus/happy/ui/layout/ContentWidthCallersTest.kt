@@ -25,12 +25,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The cap went from "a phone's longest side" to "the window's own width,
- * up to 800". Upright on a phone that changes the number — 891 to 411 —
- * and these pin down that it changes no pixels, because a cap equal to the
- * width available was never binding. Measured through the real modifier and
- * a real caller ([ItemGroup], which every settings page is made of), not
- * through the formula.
+ * The content column ([ContentTokens]) through the real modifier and a real
+ * caller ([ItemGroup], which every settings page is made of), not through
+ * the formula: a compact window is untouched, a medium one gets the 24
+ * margin and the 640 measure, an expanded one the 800 column.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -59,11 +57,25 @@ class ContentWidthCallersTest {
 
     @Test
     @Config(qualifiers = "w731dp-h411dp-xxhdpi")
-    fun onItsSideBelowTheCapNothingIsHeldInEither() {
+    fun onItsSideAPhoneIsMediumAndHeldToTheMeasure() {
         rule.setHappyContent {
             ProvideWindowLayout(Modifier.fillMaxSize()) { Capped() }
         }
-        assertDp("capped content fills the sideways phone", 731, rule.node(TAG).bounds.width)
+        val box = rule.node(TAG).bounds
+        assertDp("held to the medium column", ContentTokens.Medium.columnMaxWidth, box.width)
+        assertDp("centred", (731.dp - ContentTokens.Medium.columnMaxWidth) / 2, box.left)
+    }
+
+    @Test
+    @Config(qualifiers = "w640dp-h800dp-xxhdpi")
+    fun aNarrowMediumWindowKeepsTheMargin() {
+        rule.setHappyContent {
+            ProvideWindowLayout(Modifier.fillMaxSize()) { Capped() }
+        }
+        val box = rule.node(TAG).bounds
+        // The column's own 16 inset makes the 24 margin: 8 of gutter each side.
+        assertDp("the gutter", 8, box.left)
+        assertDp("the rest", 640 - 16, box.width)
     }
 
     @Test
@@ -73,8 +85,8 @@ class ContentWidthCallersTest {
             ProvideWindowLayout(Modifier.fillMaxSize()) { Capped() }
         }
         val box = rule.node(TAG).bounds
-        assertDp("held to the cap", ContentWidth.tablet, box.width)
-        assertDp("centred", (900.dp - ContentWidth.tablet) / 2, box.left)
+        assertDp("held to the cap", ContentTokens.Expanded.columnMaxWidth, box.width)
+        assertDp("centred", (900.dp - ContentTokens.Expanded.columnMaxWidth) / 2, box.left)
     }
 
     /** A settings page's own container, the caller with the widest reach. */
@@ -100,7 +112,7 @@ class ContentWidthCallersTest {
             }
         }
         val row = rule.node(GROUP).bounds
-        assertTrue("the row is held to the cap, not the window: $row", row.width > (ContentWidth.tablet - 34.dp) && row.width <= ContentWidth.tablet - 32.dp)
+        assertTrue("the row is held to the cap, not the window: $row", row.width > (ContentTokens.Expanded.columnMaxWidth - 34.dp) && row.width <= ContentTokens.Expanded.columnMaxWidth - 32.dp)
         assertTrue("and centred in the 900 window", row.left > 60.dp)
     }
 }

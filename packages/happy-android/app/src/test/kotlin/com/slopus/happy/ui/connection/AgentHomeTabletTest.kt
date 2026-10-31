@@ -22,7 +22,7 @@ import com.slopus.happy.ui.components.LoadingIndicatorTags
 import com.slopus.happy.ui.home.AccountMenu
 import com.slopus.happy.ui.home.AccountMenuEntry
 import com.slopus.happy.ui.home.AccountMenuTags
-import com.slopus.happy.ui.layout.ContentWidth
+import com.slopus.happy.ui.layout.ContentTokens
 import com.slopus.happy.ui.layout.ProvideWindowLayout
 import com.slopus.happy.ui.node
 import com.slopus.happy.ui.setHappyContent
@@ -58,7 +58,7 @@ class AgentHomeTabletTest {
     }
 
     /** The window is wider than the cap, so there is something to hold back. */
-    private val cap = ContentWidth.tablet
+    private val cap = ContentTokens.Expanded.columnMaxWidth
 
     @Test
     fun theBarAndEveryRowAreHeldToOneContentWidthAndCentred() {

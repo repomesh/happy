@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -56,6 +55,7 @@ import com.slopus.happy.ui.components.ShimmerText
 import com.slopus.happy.ui.components.StatusDot
 import com.slopus.happy.ui.components.hairline
 import com.slopus.happy.ui.layout.LocalWindowLayout
+import com.slopus.happy.ui.layout.contentMaxWidth
 import com.slopus.happy.ui.theme.appWeight
 import com.slopus.happy.ui.theme.HappyTheme
 import com.slopus.happy.ui.theme.happyTextStyle
@@ -135,10 +135,8 @@ fun WorktreeTabStrip(
     Box(
         modifier = modifier
             .testTag(WorktreeTabTags.STRIP)
-            .fillMaxWidth()
             .padding(top = WorktreeTabSpec.gapAbove, bottom = WorktreeTabSpec.gapBelow)
-            .wrapContentWidth(Alignment.CenterHorizontally)
-            .then(if (layout.isTablet) Modifier.widthIn(max = layout.headerMaxWidth) else Modifier)
+            .contentMaxWidth(layout)
             .padding(horizontal = WorktreeTabSpec.paddingHorizontal),
     ) {
         Row(

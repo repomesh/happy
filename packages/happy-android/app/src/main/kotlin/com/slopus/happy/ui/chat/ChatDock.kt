@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.slopus.happy.chat.ChatSessionInfo
 import com.slopus.happy.chat.ChatState
 import com.slopus.happy.chat.ComposerModes
@@ -108,7 +109,8 @@ internal fun ChatDock(
                 AgentQuestionBanner(state.pendingCommunications, actions.onAnswerQuestion, actions.onCancelQuestion)
             }
         }
-        if (activityBar != null) AnimatedFade(showDetails) { activityBar() }
+        // On the column with no inset of its own: the bar keeps its 16, on the messages' keyline.
+        if (activityBar != null) AnimatedFade(showDetails) { CenteredInputWidth(horizontalPadding = 0.dp) { activityBar() } }
         ChatComposerFor(state, session, draft, actions, now, modes, showDetails, onPanelPositioned, composerModifier, autoFocus)
     }
 }

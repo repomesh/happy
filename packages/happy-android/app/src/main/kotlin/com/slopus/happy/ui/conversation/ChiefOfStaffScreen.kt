@@ -24,6 +24,8 @@ import com.slopus.happy.ui.components.MaterialSymbols
 import com.slopus.happy.ui.components.FadeContent
 import com.slopus.happy.ui.components.LoadingIndicator
 import com.slopus.happy.ui.components.StatePage
+import com.slopus.happy.ui.layout.LocalWindowLayout
+import com.slopus.happy.ui.layout.contentMaxWidth
 import com.slopus.happy.ui.theme.HappyTheme
 
 object ChiefOfStaffTags {
@@ -57,6 +59,7 @@ fun ChiefOfStaffScreen(problem: String?, onRetry: () -> Unit, onBack: () -> Unit
                     titleContentColor = colors.text,
                     navigationIconContentColor = colors.text,
                 ),
+                modifier = Modifier.contentMaxWidth(LocalWindowLayout.current),
             )
         },
     ) {

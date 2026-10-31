@@ -280,7 +280,7 @@ class FilesLayoutTest {
         assertTrue("at least 200 high", text.height.value >= 200)
         rule.node(TextSelectionTags.COPY).performClick()
         assertEquals(1, copied)
-        assertDp("copy padded 8 around 24", 40, rule.node(TextSelectionTags.COPY).bounds.width)
+        assertDp("copy padded 12 around 24, a 48 target with the glyph on the keyline", 48, rule.node(TextSelectionTags.COPY).bounds.width)
     }
 
     @Test

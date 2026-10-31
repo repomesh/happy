@@ -73,7 +73,7 @@ class OnboardingLayoutTest {
     fun blockReservesTheChecklistAndSitsCentred() {
         setLink()
         assertBox("header bar", rule.node(HeaderTags.BAR).bounds, 0.dp, 0.dp, PHONE_WIDTH.dp, 64.dp)
-        assertBox("gear slot", rule.node(HeaderTags.RIGHT).bounds, (PHONE_WIDTH - 16 - 48).dp, 8.dp, 48.dp, 48.dp)
+        assertBox("gear slot", rule.node(HeaderTags.RIGHT).bounds, (PHONE_WIDTH - 4 - 48).dp, 8.dp, 48.dp, 48.dp)
 
         // Footer: Get help, 36 high, 16 from the right, 12 above the bottom.
         val help = rule.node(OnboardingTags.GET_HELP).bounds

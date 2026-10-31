@@ -61,6 +61,8 @@ import com.slopus.happy.browser.Browser
 import com.slopus.happy.browser.BrowserPolicy
 import com.slopus.happy.browser.BrowserProxy
 import com.slopus.happy.ui.components.MaterialSymbols
+import com.slopus.happy.ui.layout.LocalWindowLayout
+import com.slopus.happy.ui.layout.contentMaxWidth
 import com.slopus.happy.ui.theme.HappyTheme
 import com.slopus.happy.ui.theme.happyTextStyle
 import kotlinx.coroutines.CancellationException
@@ -334,7 +336,8 @@ fun BrowserView(
         }
         HorizontalDivider(thickness = 0.5.dp, color = colors.divider)
         Row(
-            Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).height(50.dp).padding(horizontal = 8.dp),
+            // On the content column, its outer glyphs on the keyline as the bar's are.
+            Modifier.windowInsetsPadding(WindowInsets.navigationBars).contentMaxWidth(LocalWindowLayout.current).height(50.dp).padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {

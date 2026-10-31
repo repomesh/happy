@@ -270,9 +270,10 @@ class ConversationPicturesTest {
         show(4032, 3024, rows(Message("u3", "user", 1, listOf(Block.Text("Both"), Block.Image("image/png", base64(png(1008, 756)))))))
         val bubble = rule.node(MessageTags.USER_BUBBLE).bounds()
         val tile = tiles().single()
-        assertDp("bubble right", 750 - 16, bubble.right)
+        // Medium: the 640 measure centred, so the keyline is 55 in.
+        assertDp("bubble right", 750 - 55, bubble.right)
         assertDp("photo flush right", bubble.right, tile.right)
-        // 718 between the margins, 698 for photos; a 1008 × 756 photo at the 360 cap: 480 wide.
+        // 640 between the keylines, 620 for photos; a 1008 × 756 photo at the 360 cap: 480 wide.
         assertDp("height", 360, tile.height)
         assertDp("width", 480, tile.width)
         shot("pictures-fold-inner")

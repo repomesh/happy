@@ -297,7 +297,8 @@ fun ConversationScreen(
                     navigationIconContentColor = colors.text,
                     actionIconContentColor = colors.text,
                 ),
-                modifier = Modifier.testTag(ConversationScreenTags.BAR),
+                // On the content column, so back and the actions' glyphs sit on the messages' keyline.
+                modifier = Modifier.contentMaxWidth(LocalWindowLayout.current).testTag(ConversationScreenTags.BAR),
             )
         },
     ) { top ->

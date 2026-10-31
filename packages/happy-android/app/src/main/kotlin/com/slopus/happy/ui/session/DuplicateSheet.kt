@@ -63,6 +63,7 @@ import com.slopus.happy.ui.components.hairline
 import com.slopus.happy.ui.theme.HappyTheme
 import com.slopus.happy.ui.theme.happyTextStyle
 import kotlinx.coroutines.launch
+import com.slopus.happy.ui.layout.ContentTokens
 
 /** Resume, fork and duplicate (ops.ts); tests use a fake. */
 interface SessionContinuations {
@@ -108,7 +109,7 @@ object DuplicateSheetTags {
 /** DuplicateSheet.tsx's styles; duplicateSheetLayout.ts's frame. */
 object DuplicateSheetSpec {
     val margin = 16.dp
-    val maxWidth = 560.dp
+    val maxWidth = ContentTokens.dialogMaxWidth
     const val MAX_HEIGHT_RATIO = 0.85f
     val radius = 16.dp
     val title = happyTextStyle(fontSize = 17, weight = FontWeight.SemiBold)

@@ -80,12 +80,11 @@ fun TextSelectionScreen(text: String?, onBack: () -> Unit, onCopy: () -> Unit) {
                 right = {
                     Box(
                         Modifier
-                            .padding(end = 8.dp)
                             .testTag(TextSelectionTags.COPY)
                             .clip(RoundedCornerShape(8.dp))
                             .clickable(enabled = enabled, role = Role.Button, onClick = onCopy)
                             .semantics { contentDescription = copyLabel }
-                            .padding(8.dp),
+                            .padding(12.dp),
                     ) {
                         Icon(Ionicon.CopyOutline, 24.dp, if (enabled) colors.header.tint else colors.textSecondary)
                     }
