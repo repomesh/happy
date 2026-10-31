@@ -84,10 +84,12 @@ final class AgentChatUltraListTests: XCTestCase {
         XCTAssertTrue(view.canvas.drawsTextOffMain)
         XCTAssertEqual(view.canvas.accessibilityIdentifier, "message")
         XCTAssertEqual(view.update(width: 390, transition: .none), 60, "as tall as its plan")
-        // The part on screen is the part with views in it.
-        let band = CGRect(x: 0, y: 10, width: 390, height: 40)
-        view.visibleRectUpdated(band)
-        XCTAssertEqual(view.canvas.band, band)
+        // The part on screen is the part with views in it, turned over:
+        // the list runs the other way up from the row.
+        view.visibleRectUpdated(CGRect(x: 0, y: 10, width: 390, height: 40))
+        XCTAssertEqual(view.canvas.band, CGRect(x: 0, y: 10, width: 390, height: 40))
+        view.visibleRectUpdated(CGRect(x: 0, y: 0, width: 390, height: 20))
+        XCTAssertEqual(view.canvas.band, CGRect(x: 0, y: 40, width: 390, height: 20))
         view.visibleRectUpdated(nil)
         XCTAssertEqual(view.canvas.band, .null, "off screen: none of it")
     }

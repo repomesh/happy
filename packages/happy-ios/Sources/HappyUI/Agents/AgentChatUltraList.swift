@@ -329,8 +329,18 @@ final class AgentChatRowView: ListRowView, UIGestureRecognizerDelegate {
     override func update(width: Double, transition: ListTransition) -> Double { row.plan.size.height }
 
     /// A tall row has views only for the part on screen (`ChatChunks`).
+    /// The list says which part in its own coordinates, which run the
+    /// other way up from the row's (the list is upside down and the row
+    /// stands the right way up in it), so the part is turned over: taken
+    /// as it came, the foot of a long reply on screen mounted its head,
+    /// and the screen showed nothing.
     override func visibleRectUpdated(_ rect: CGRect?) {
-        canvas.band = rect ?? .null
+        canvas.band = rect.map { Self.band(of: $0, height: row.plan.size.height) } ?? .null
+    }
+
+    /// `rect`, the part on screen in the list's coordinates, in the row's.
+    static func band(of rect: CGRect, height: CGFloat) -> CGRect {
+        CGRect(x: rect.minX, y: height - rect.maxY, width: rect.width, height: rect.height)
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
