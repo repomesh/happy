@@ -169,17 +169,21 @@ public struct PickerLineLayout: Equatable, Sendable {
 }
 
 /// A usage gauge as desktop's: what is left, then a ring that drains as the
-/// window is spent.
+/// window is spent. Without its ring it is the text alone, as "Signed out"
+/// stands in a signed-out account's gauge.
 public struct UsageGaugeLayout: Equatable, Sendable {
     public var size: CGSize
     public var text: CGRect
+    /// Zero wide without a ring.
     public var ring: CGRect
 
-    public init(text: CGSize) {
-        let ringSize = PickerMetrics.ring
+    public init(text: CGSize, ring hasRing: Bool = true) {
+        let ringSize = hasRing ? PickerMetrics.ring : 0
         let height = max(text.height, ringSize)
         self.text = CGRect(x: 0, y: (height - text.height) / 2, width: text.width, height: text.height)
-        ring = CGRect(x: text.width + PickerMetrics.ringGap, y: (height - ringSize) / 2, width: ringSize, height: ringSize)
+        ring = hasRing
+            ? CGRect(x: text.width + PickerMetrics.ringGap, y: (height - ringSize) / 2, width: ringSize, height: ringSize)
+            : CGRect(x: text.width, y: height / 2, width: 0, height: 0)
         size = CGSize(width: ring.maxX, height: height)
     }
 }

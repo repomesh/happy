@@ -20,13 +20,90 @@ final class ModelState {
         }
     }
     private let offline: OfflineFile?
+    private let store: Store?
     private var watchers: [UUID: () -> Void] = [:]
     private var loading: Task<Void, Never>?
+    private var loadAgain = false
     private var refreshing: Task<Void, Never>?
+    /// What follows the computer's account readings and configuration while
+    /// a composer shows them, and how many do.
+    private var following: Task<Void, Never>?
+    private var followers = 0
+    private var lingering: Task<Void, Never>?
+    private var reading: Task<Void, Never>?
+    private var readAgain = false
 
-    init(client: AgentClient, offline: OfflineFile? = nil) {
+    init(client: AgentClient, offline: OfflineFile? = nil, store: Store? = nil) {
         self.client = client
         self.offline = offline
+        self.store = store
+    }
+
+    /// Follows the accounts' readings for as long as the returned watch is
+    /// held, so a composer's model chip can warn as its account runs low:
+    /// read once, then again whenever the computer says an account's usage
+    /// or the configuration changed (`provider.usage.updated`,
+    /// `config.updated`, which also brings the catalog's hidden accounts and
+    /// models up to date). As desktop's usage source, it keeps following
+    /// for a while after the last watch goes, so opening chat after chat
+    /// doesn't read every account again.
+    func followUsage() -> Watch {
+        followers += 1
+        lingering?.cancel()
+        lingering = nil
+        if following == nil { startFollowing() }
+        return Watch { [weak self] in self?.unfollow() }
+    }
+
+    /// How long following outlives its last watch (`SOURCE_LINGER_MS`).
+    static let linger: Duration = .seconds(30)
+
+    private func unfollow() {
+        followers -= 1
+        guard followers == 0 else { return }
+        lingering = Task { [weak self] in
+            guard (try? await Task.sleep(for: Self.linger)) != nil, let self, followers == 0 else { return }
+            following?.cancel()
+            following = nil
+            lingering = nil
+        }
+    }
+
+    private func startFollowing() {
+        guard let store else { return readUsage() }
+        following = Task { [weak self] in
+            let events = await store.events(matching: ["provider.usage.", "config.updated"])
+            guard !Task.isCancelled else { return }
+            self?.readUsage()
+            for await event in events {
+                guard let self, !Task.isCancelled else { return }
+                switch event {
+                case .resync:
+                    load(again: true)
+                    readUsage()
+                case .event(let envelope):
+                    if envelope["type"]?.stringValue == "config.updated" { load(again: true) }
+                    readUsage()
+                }
+            }
+        }
+    }
+
+    /// Reads every account, one read at a time; one asked for meanwhile
+    /// runs once that one lands.
+    private func readUsage() {
+        guard reading == nil else { readAgain = true; return }
+        let client = client
+        reading = Task { [weak self] in
+            let usage = try? await client.accountUsage()
+            guard let self else { return }
+            if let usage { apply(usage) }
+            reading = nil
+            if readAgain {
+                readAgain = false
+                readUsage()
+            }
+        }
     }
 
     /// The dock's pick, or the computer's default until one is made.
@@ -44,8 +121,8 @@ final class ModelState {
 
     /// Reads the catalog, once at a time: what was kept first, so the
     /// pickers are drawn offline too, then the computer's own.
-    func load() {
-        guard loading == nil else { return }
+    func load(again: Bool = false) {
+        guard loading == nil else { loadAgain = loadAgain || again; return }
         let client = client
         let offline = offline
         loading = Task { [weak self] in
@@ -58,6 +135,11 @@ final class ModelState {
             let read = try? await client.modelCatalogResponse()
             guard let self else { return }
             loading = nil
+            // The configuration changed while this read was out: read it again.
+            if loadAgain {
+                loadAgain = false
+                load()
+            }
             guard let read else { return }
             if read.catalog != self.catalog {
                 self.catalog = read.catalog
@@ -115,15 +197,28 @@ enum ModelPickers {
 
     /// The card's model control, in its own bar beside send as desktop's
     /// composer has it: the model and its effort, each opening its own
-    /// list. With nothing to list a press asks for the models again.
-    static func configure(_ card: AgentInputCardView, menus: ModelMenus?) {
+    /// list. With nothing to list a press asks for the models again. While
+    /// the selected account runs low, a ring before the model's name warns
+    /// of it, as desktop's closed pill does, and the chip reads it out.
+    static func configure(_ card: AgentInputCardView, menus: ModelMenus?, usage: [String: AccountUsage] = [:], now: Date = Date()) {
         let labels = chips(menus)
         func chip(_ kind: String, _ value: String) -> AgentInputChipConfiguration {
             AgentInputChipConfiguration(content: .label(value), accessibilityLabel: Strings.chipLabel(kind, value), menu: nil, opensPicker: true)
         }
         card.configuration.permission = nil
-        card.configuration.model = chip(Strings.model, labels.model)
+        var model = chip(Strings.model, labels.model)
+        if let warning = warning(menus, usage: usage) {
+            model.ring = .init(left: warning.left, tone: warning.tone)
+            model.accessibilityLabel += ". \(Strings.usageWarning(warning, now: now))."
+        }
+        card.configuration.model = model
         card.configuration.effort = labels.effort.map { chip(Strings.effort, $0) }
+    }
+
+    /// The window the selected account warns about, if it runs low.
+    static func warning(_ menus: ModelMenus?, usage: [String: AccountUsage]) -> AccountUsage.Warning? {
+        guard let menus, !menus.services.isEmpty || menus.current != nil else { return nil }
+        return usage[menus.selection.providerId]?.warning
     }
 
     /// A pick's key: what it changes, then which.
@@ -142,10 +237,10 @@ enum ModelPickers {
     // MARK: Lists
 
     /// The model list: a notice about the account first, then each service
-    /// under its heading (its name, the account it lists, that account's
-    /// windows, and a chevron to its accounts), a hairline between them,
-    /// the selected model checked.
-    static func modelContent(_ menus: ModelMenus, usage: [String: AccountUsage]) -> PickerContent {
+    /// under its heading (its name, the account it lists, the window it is
+    /// running low on, and a chevron to its accounts), a hairline between
+    /// them, the selected model checked.
+    static func modelContent(_ menus: ModelMenus, usage: [String: AccountUsage], now: Date = Date()) -> PickerContent {
         var lines: [Line] = []
         func block() { if !lines.isEmpty { lines.append(.separator) } }
         if let notice = notice(menus) { lines.append(.notice(notice, warning: menus.notice != .hidden)) }
@@ -163,9 +258,11 @@ enum ModelPickers {
         for service in menus.services {
             block()
             let account = service.shown
-            let windows = account.flatMap { usage[$0.id] }.map(Self.windows) ?? []
-            let gauges = windows.map { gauge($0, blocked: $0.blocking) }
-            let label = Strings.headingLabel(service.label, account?.label ?? service.account, windows.map { Strings.windowLeft(Strings.window($0.kind), $0.left) })
+            // `HeaderUsage`: the one window running low, as the chip warns
+            // of it; nothing while the account has room.
+            let warning = account.flatMap { usage[$0.id]?.warning }
+            let gauges = warning.map { [gauge($0.window, blocked: $0.window.blocking)] } ?? []
+            let label = Strings.headingLabel(service.label, account?.label ?? service.account, warning.map { [Strings.usageWarning($0, now: now)] } ?? [])
             lines.append(.heading(service: service.label, account: account?.label, gauges: gauges, opens: service.accounts.isEmpty ? nil : service.id, label: label))
             for model in account?.models ?? [] {
                 lines.append(.option(
@@ -194,14 +291,18 @@ enum ModelPickers {
     }
 
     /// A service's accounts, the one it lists checked, each with what is
-    /// left of its week; under them, that account's windows.
+    /// left of its week (`ComposerModelAccountGauge`), or that it is signed
+    /// out; under them, that account's windows.
     static func accountsContent(_ service: ModelMenus.Service, menus: ModelMenus, usage: [String: AccountUsage], now: Date = Date()) -> PickerContent {
         var lines: [Line] = service.accounts.map { account in
             let reading = usage[account.id]
             return .option(
                 key: key(.provider, account.id), label: account.label,
                 checked: account.id == service.shown?.id, disabled: menus.model(on: account) == nil,
-                gauge: reading.flatMap { reading in reading.shown.map { gauge($0, blocked: reading.limited) } }
+                gauge: reading.flatMap { reading in
+                    reading.signedOut ? PickerContent.Gauge(text: Strings.signedOut, left: 0, tone: .critical, ring: false)
+                        : reading.shown.map { gauge($0, blocked: reading.limited) }
+                }
             )
         }
         if let shown = service.shown {
@@ -237,7 +338,10 @@ enum ModelPickers {
         }
         if windows.isEmpty { lines.append(.init(label: Strings.usageUnknown)) }
         guard let usage else { return lines }
-        if usage.limited {
+        // A signed-out account says so on the line a spent one names its reset.
+        if usage.signedOut {
+            lines.append(.init(label: Strings.signedOut, critical: true))
+        } else if usage.limited {
             lines.append(.init(label: usage.limitResets.map { Strings.limitResets(Strings.dayTime($0, now: now)) } ?? Strings.limitReached, critical: true))
         }
         if usage.refreshing {

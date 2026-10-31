@@ -12,13 +12,20 @@ public struct ModelCatalog: Equatable, Sendable {
         public var efforts: [String]
         public var defaultEffort: String
         public var serviceTiers: [String]
+        /// The hard window in tokens; nil for a custom model whose limit is unknown.
+        public var contextWindow: Int?
+        /// The measured size at which the daemon compacts on its own, below
+        /// the window; nil from an older daemon or a model without one.
+        public var autoCompactWindow: Int?
 
-        public init(id: String, name: String, efforts: [String], defaultEffort: String, serviceTiers: [String] = []) {
+        public init(id: String, name: String, efforts: [String], defaultEffort: String, serviceTiers: [String] = [], contextWindow: Int? = nil, autoCompactWindow: Int? = nil) {
             self.id = id
             self.name = name
             self.efforts = efforts
             self.defaultEffort = defaultEffort
             self.serviceTiers = serviceTiers
+            self.contextWindow = contextWindow
+            self.autoCompactWindow = autoCompactWindow
         }
     }
 
@@ -32,14 +39,18 @@ public struct ModelCatalog: Equatable, Sendable {
         /// Kept out of the pickers; a selection on it still works.
         public var hidden: Bool
         public var models: [Model]
+        /// Its switched-on models the daemon keeps out of the pickers (a
+        /// reference's `hidden`); a selection on one still works.
+        public var hiddenModels: [String]
 
-        public init(id: String, name: String?, type: String, enabled: Bool, hidden: Bool, models: [Model]) {
+        public init(id: String, name: String?, type: String, enabled: Bool, hidden: Bool, models: [Model], hiddenModels: [String] = []) {
             self.id = id
             self.name = name
             self.type = type
             self.enabled = enabled
             self.hidden = hidden
             self.models = models
+            self.hiddenModels = hiddenModels
         }
 
         /// Switched off, or on with nothing to offer: its models can't be picked.
@@ -77,7 +88,10 @@ public struct ModelCatalog: Equatable, Sendable {
                 name: reference?["name"]?.stringValue ?? definition["name"]?.stringValue ?? id,
                 efforts: efforts,
                 defaultEffort: (reference?["defaultEffort"] ?? definition["defaultEffort"])?.stringValue ?? efforts.first ?? "medium",
-                serviceTiers: (reference?["serviceTiers"] ?? definition["serviceTiers"])?.arrayValue?.compactMap(\.stringValue) ?? []
+                serviceTiers: (reference?["serviceTiers"] ?? definition["serviceTiers"])?.arrayValue?.compactMap(\.stringValue) ?? [],
+                // The window is the model's own, whichever account serves it.
+                contextWindow: definition["contextWindow"]?.numberValue.map { Int($0) },
+                autoCompactWindow: definition["autoCompactWindow"]?.numberValue.map { Int($0) }
             )
         }
         let modelOrder = JSONKeyOrder.keys(in: data, at: ["config", "models"])
@@ -90,16 +104,17 @@ public struct ModelCatalog: Equatable, Sendable {
             models: Self.ordered(definitions.keys, by: modelOrder).compactMap { model($0, nil) },
             providers: Self.ordered(providers.keys, by: providerOrder).compactMap { id in
                 guard let provider = providers[id] else { return nil }
-                let references = provider["models"]?.arrayValue ?? []
+                let references = (provider["models"]?.arrayValue ?? []).filter { $0["enabled"]?.boolValue == true }
                 return Provider(
                     id: id,
                     name: provider["name"]?.stringValue,
                     type: provider["type"]?.stringValue ?? id,
                     enabled: provider["enabled"]?.boolValue ?? false,
                     hidden: provider["hidden"]?.boolValue ?? false,
-                    models: references.filter { $0["enabled"]?.boolValue == true }.compactMap { reference in
+                    models: references.compactMap { reference in
                         reference["id"]?.stringValue.flatMap { model($0, reference) }
-                    }
+                    },
+                    hiddenModels: references.filter { $0["hidden"]?.boolValue == true }.compactMap { $0["id"]?.stringValue }
                 )
             }
         )
@@ -203,9 +218,16 @@ public struct ModelMenus: Equatable, Sendable {
         for provider in catalog.providers {
             let choices = provider.models.map { Self.choice($0, disabled: provider.isDisabled) }
             if provider.id == selection.providerId { current = choices.first { $0.id == selection.modelId } }
-            // A hidden account is not offered, though the selection on it stays.
+            // A hidden account or model is not offered, though the selection
+            // on it stays, and a hidden model the conversation is already on
+            // stays in its own list (`happyAgentMenusDerive`). An account
+            // with nothing to list is no row at all.
             guard !provider.hidden else { continue }
-            let account = Account(id: provider.id, label: provider.name ?? provider.id, models: choices)
+            let offered = choices.filter { choice in
+                (provider.id == selection.providerId && choice.id == selection.modelId) || !provider.hiddenModels.contains(choice.id)
+            }
+            guard !offered.isEmpty else { continue }
+            let account = Account(id: provider.id, label: provider.name ?? provider.id, models: offered)
             if let index = services.firstIndex(where: { $0.id == provider.type }) {
                 services[index].accounts.append(account)
                 if provider.id == selection.providerId { services[index].account = provider.id }
@@ -226,13 +248,13 @@ public struct ModelMenus: Equatable, Sendable {
         }
         self.services = services
         self.current = current
+        // `currentAccount`: gone, switched off, hidden, or an ordinary choice.
+        // On but offering nothing is no notice: it has nothing to say why.
         let name = selected?.name ?? selection.providerId
-        if let selected, !selected.isDisabled {
-            notice = selected.hidden ? .hidden : nil
-        } else if selected == nil {
-            notice = .removed(name)
+        if let selected {
+            notice = !selected.enabled ? .off(name) : selected.hidden ? .hidden : nil
         } else {
-            notice = .off(name)
+            notice = .removed(name)
         }
     }
 
@@ -316,6 +338,19 @@ public struct AccountUsage: Equatable, Sendable {
     public var limited: Bool
     /// When it is usable again, if the service said.
     public var limitResets: Date?
+    /// Its sign-in is missing or was refused, so nothing can be sent to it.
+    public var signedOut = false
+
+    public init(week: Window? = nil, session: Window? = nil, updatedAt: Date? = nil, refreshing: Bool = false, refreshError: String? = nil, limited: Bool = false, limitResets: Date? = nil, signedOut: Bool = false) {
+        self.week = week
+        self.session = session
+        self.updatedAt = updatedAt
+        self.refreshing = refreshing
+        self.refreshError = refreshError
+        self.limited = limited
+        self.limitResets = limitResets
+        self.signedOut = signedOut
+    }
 
     /// Every account with a reading, a read in flight or a failed read.
     public static func project(_ response: JSONValue) -> [String: AccountUsage] {
@@ -331,7 +366,8 @@ public struct AccountUsage: Equatable, Sendable {
             let refreshedAt = entry["refreshedAt"]?.numberValue ?? (hasPlan ? reading?["capturedAt"]?.numberValue : nil)
             let refreshError = entry["refreshError"]?.stringValue ?? entry["error"]?.stringValue
             let refreshing = entry["refreshing"]?.boolValue ?? false
-            guard hasPlan || refreshing || refreshError != nil else { continue }
+            let signedOut = entry["signIn"]?.stringValue == "signed_out"
+            guard hasPlan || refreshing || refreshError != nil || signedOut else { continue }
             let exhausted = hasPlan && reading?["exhausted"]?.boolValue == true
             // Every full window holds a spent account back; one blocked with
             // none full waits on its fullest.
@@ -354,7 +390,8 @@ public struct AccountUsage: Equatable, Sendable {
                 refreshing: refreshing,
                 refreshError: refreshError,
                 limited: exhausted,
-                limitResets: exhausted ? resets.map(date) : nil
+                limitResets: exhausted ? resets.map(date) : nil,
+                signedOut: signedOut
             )
         }
         return usage
@@ -378,6 +415,25 @@ public struct AccountUsage: Equatable, Sendable {
     public static func tone(left: Int, blocked: Bool) -> Tone {
         if blocked || left < 10 { return .critical }
         return left < 25 ? .low : .ample
+    }
+
+    /// The one window an account warns about, on the closed model chip and
+    /// on its service's heading alike (desktop's `usageWarning`).
+    public struct Warning: Equatable, Sendable {
+        public var window: Window
+        public var left: Int
+        public var tone: Tone
+    }
+
+    /// The week when it is low, otherwise the session, and none while both
+    /// have room. A window holding a spent account back is critical
+    /// whatever its number says.
+    public var warning: Warning? {
+        for window in [week, session].compactMap({ $0 }) {
+            let tone = Self.tone(left: window.left, blocked: window.blocking)
+            if tone != .ample { return Warning(window: window, left: window.left, tone: tone) }
+        }
+        return nil
     }
 }
 

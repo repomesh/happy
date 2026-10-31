@@ -551,6 +551,29 @@ extension AgentWire {
         public var cursor: String?
         /// Every child the agent spawned, hidden collaborators included.
         public var subagents: [Agent]?
+        /// The latest measurement of its conversation's context; nil until
+        /// the provider has reported one.
+        public var context: ContextUsage?
+    }
+
+    /// `AgentContextUsage`: the latest exact provider measurement of one
+    /// agent's active conversation context, replaced whole by
+    /// `agent.context.updated`.
+    public struct ContextUsage: Equatable, Sendable, Codable {
+        public var approximate: Bool
+        public var contextTokens: Double
+        /// The configured hard limit; nil for a custom model with no known limit.
+        public var contextWindow: Double?
+        public var modelId: String?
+        public var providerId: String
+
+        public init(approximate: Bool = false, contextTokens: Double, contextWindow: Double?, modelId: String?, providerId: String) {
+            self.approximate = approximate
+            self.contextTokens = contextTokens
+            self.contextWindow = contextWindow
+            self.modelId = modelId
+            self.providerId = providerId
+        }
     }
 
     public struct Setting: Equatable, Sendable, Codable {

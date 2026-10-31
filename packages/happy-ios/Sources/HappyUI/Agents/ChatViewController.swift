@@ -104,6 +104,11 @@ final class ChatViewController: UIViewController, ComposeHosting {
     private let jump = ChatJumpButton()
     private var jumpShown = false
     private let card = AgentInputCardView(configuration: AgentInputCardConfiguration(placeholder: Strings.Composer.inputPlaceholder))
+    /// How much of the context window the conversation has spent, under
+    /// the card at its far end, as desktop's under its composer.
+    let meter = ContextMeterView()
+    /// What it shows; nil hides its row.
+    private(set) var gauge: AgentContextGauge?
     private let keyboardTracker = UIView()
     /// The keyboard's top as its notifications last said (down: past any
     /// screen), which the composer rides on the keyboard's own curve. The
@@ -145,6 +150,8 @@ final class ChatViewController: UIViewController, ComposeHosting {
     }
     private var watch: Watch?
     private var modelsWatch: Watch?
+    /// Holds the accounts' readings followed while this screen shows.
+    private var usageWatch: Watch?
     private var headerWatch: Watch?
     private var headerState: Strings.HeaderStatus.State = .connecting
     private var copied: (id: String, until: Task<Void, Never>)?
@@ -325,6 +332,8 @@ final class ChatViewController: UIViewController, ComposeHosting {
         jump.addTarget(self, action: #selector(jumpToLatest), for: .touchUpInside)
         view.addSubview(jump)
         view.addSubview(card)
+        meter.isHidden = true
+        view.addSubview(meter)
         header.onOpen = { [weak self] in self?.openDetail() }
 
         keyboardTracker.isHidden = true
@@ -402,6 +411,9 @@ final class ChatViewController: UIViewController, ComposeHosting {
         if let bar = navigationController?.navigationBar { barShaders.attach(to: bar, alongside: transitionCoordinator) }
         let conversation = conversation
         Task { await conversation.setVisible(true) }
+        // The model chip warns as its account runs low, so the readings are
+        // followed while the composer shows.
+        if usageWatch == nil { usageWatch = session.models.followUsage() }
         toldReadsNewest = nil
         tellReadsNewest(moving: false)
     }
@@ -453,6 +465,8 @@ final class ChatViewController: UIViewController, ComposeHosting {
         #endif
         let conversation = conversation
         Task { await conversation.setVisible(false) }
+        usageWatch?.invalidate()
+        usageWatch = nil
         if isMovingFromParent || navigationController == nil {
             following?.cancel()
             made?.cancel()
@@ -541,7 +555,7 @@ final class ChatViewController: UIViewController, ComposeHosting {
     private var compacts: Bool {
         var safeArea = LayoutInsets(view.safeAreaInsets)
         if let barSafeTop { safeArea.top = barSafeTop }
-        return ChatScreenLayout.compacts(size: view.bounds.size, safeArea: safeArea, keyboardTop: keyboardTop) { [card] width in
+        return ChatScreenLayout.compacts(size: view.bounds.size, safeArea: safeArea, keyboardTop: keyboardTop, meter: gauge != nil) { [card] width in
             card.restingHeight(fitting: width)
         }
     }
@@ -734,6 +748,13 @@ final class ChatViewController: UIViewController, ComposeHosting {
     private func settled(_ chat: ChatSnapshot) -> Bool { reading(chat) || !chat.items.isEmpty }
 
     private func apply(_ snapshot: ChatSnapshot) {
+        // A new measurement alone, as each turn streams: only the meter moves.
+        var measured = chat
+        measured.context = snapshot.context
+        if snapshot.context != chat.context, measured == snapshot {
+            chat = snapshot
+            return updateMeter()
+        }
         let wasSettled = settled(chat)
         chat = snapshot
         applyTitle()
@@ -797,9 +818,23 @@ final class ChatViewController: UIViewController, ComposeHosting {
             card.configuration.model = nil
             card.configuration.effort = nil
         } else {
-            ModelPickers.configure(card, menus: menus)
+            ModelPickers.configure(card, menus: menus, usage: session.models.usage)
             picker?.update(menus: menus, usage: session.models.usage)
         }
+        updateMeter()
+    }
+
+    /// The meter for the conversation's last measurement against the
+    /// selected model's window. There is none while history is read, nor
+    /// for new work before its first message, which has no conversation
+    /// to measure yet (desktop's gauge needs a session).
+    private func updateMeter() {
+        let next = (reading(chat) && picked == nil) || (opensFocused && chat.items.isEmpty) ? nil
+            : AgentContextGauge.derive(catalog: session.models.catalog, context: chat.context, selection: mode)
+        if let next { meter.show(next) }
+        let rowChanged = (next == nil) != (gauge == nil)
+        gauge = next
+        if rowChanged { view.setNeedsLayout() }
     }
 
     /// The "+" menu over `host`: new work for a picture opens it over this
@@ -1133,13 +1168,17 @@ final class ChatViewController: UIViewController, ComposeHosting {
         barShaders.layout()
         // From where the keyboard rests, not the finger dragging it: the
         // card keeps its shape through a drag and changes once it settles.
-        card.configuration.compact = compacts
+        let compact = compacts
+        card.configuration.compact = compact
         let screen = ChatScreenLayout(
             size: view.bounds.size, safeArea: LayoutInsets(view.safeAreaInsets),
-            keyboardTop: fingerOnKeyboard ? keyboardTracker.frame.minY : keyboardTop
+            keyboardTop: fingerOnKeyboard ? keyboardTracker.frame.minY : keyboardTop,
+            meter: ChatScreenLayout.showsMeter(hasGauge: gauge != nil, compact: compact)
         ) { [card] width in card.height(fitting: width) }
         transcriptHeaderScrim.setLayoutFrame(screen.headerScrim)
         card.setLayoutFrame(screen.card)
+        meter.isHidden = screen.meter == nil
+        if let frame = screen.meter { meter.setLayoutFrame(frame) }
         layoutNewWorkPanel(above: screen.card)
         picker?.follow()
         let foot = ChatFootLayout(size: view.bounds.size, card: screen.card)
@@ -1967,7 +2006,8 @@ extension ChatViewController {
             if screen.ownsKeyboard,
                top > screen.keyboardTop + 20, top < screen.view.bounds.maxY - 30 {
                 keyboardFrames += 1
-                keyboardGap = max(keyboardGap, abs(top - screen.card.frame.maxY - 8))
+                let rest = screen.meter.isHidden ? ChatScreenLayout.Metrics.paddingBottom : ContextMeterLayout.Metrics.height
+                keyboardGap = max(keyboardGap, abs(top - screen.card.frame.maxY - rest))
             }
             observePop()
             watch()

@@ -136,6 +136,40 @@ final class ConversationTests: XCTestCase {
         await conversation.stop()
     }
 
+    /// The meter's measurement: the bootstrap's, then each
+    /// `agent.context.updated` as a turn streams, replacing it whole; null
+    /// clears it, and another agent's is not this one's.
+    func testTheContextMeasurementFollowsItsEvents() async throws {
+        func measured(_ tokens: Double) -> JSONValue {
+            .object(["approximate": .bool(false), "contextTokens": .number(tokens), "contextWindow": .number(200_000),
+                     "modelId": .string("anthropic/sonnet-5"), "providerId": .string("claude")])
+        }
+        let client = AgentClient(transport: LongHistoryServer(runs: 1, context: measured(84_000)), token: "t")
+        let engine = SyncEngine(client: client, directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let conversation = Conversation(client: client, store: engine.spaces, agentId: "long")
+        var updates = conversation.updates.makeAsyncIterator()
+        func context(_ check: (AgentWire.ContextUsage?) -> Bool) async -> AgentWire.ContextUsage?? {
+            while let snapshot = await updates.next() {
+                if snapshot.loaded, check(snapshot.context) { return .some(snapshot.context) }
+            }
+            return nil
+        }
+        await conversation.start()
+        let opened = await context { $0 != nil }
+        XCTAssertEqual(opened??.contextTokens, 84_000)
+        func updated(_ agentId: String, _ value: JSONValue) -> JSONValue {
+            .object(["type": .string("agent.context.updated"), "payload": .object(["agentId": .string(agentId), "context": value])])
+        }
+        await engine.spaces.externalEvent(updated("other", measured(1)))
+        await engine.spaces.externalEvent(updated("long", measured(120_000)))
+        let streamed = await context { $0?.contextTokens != 84_000 }
+        XCTAssertEqual(streamed??.contextTokens, 120_000, "another agent's measurement is not this one's")
+        await engine.spaces.externalEvent(updated("long", .null))
+        let cleared = await context { $0 == nil }
+        XCTAssertNotNil(cleared)
+        await conversation.stop()
+    }
+
     func testAMessageWithoutAPictureBytesStillDecodes() throws {
         let json = #"{"id":"m","role":"user","createdAt":1,"content":[{"type":"text","text":"hi"},{"type":"image","mimeType":"image/png"}],"metadata":{}}"#
         let decoded = try JSONDecoder().decode(AgentWire.Message.self, from: Data(json.utf8))
@@ -177,7 +211,9 @@ final class MarkdownTests: XCTestCase {
 /// A daemon with one conversation of `runs` runs, all on its first page.
 private actor LongHistoryServer: AgentTransport {
     let runs: Int
-    init(runs: Int) { self.runs = runs }
+    /// The bootstrap's context measurement, when it has one.
+    let context: JSONValue?
+    init(runs: Int, context: JSONValue? = nil) { self.runs = runs; self.context = context }
 
     func request(method: String, path: String, credential: String, body: Data?, headers: [String: String]) throws -> HTTP1Response {
         let value: JSONValue
@@ -189,7 +225,7 @@ private actor LongHistoryServer: AgentTransport {
                 ])])
             })])
         } else if path.hasSuffix("/bootstrap") {
-            value = .object(["agent": .object(["id": .string("long"), "workspaceId": .string("w"), "status": .string("idle")]), "pending": .array([])])
+            value = .object(["agent": .object(["id": .string("long"), "workspaceId": .string("w"), "status": .string("idle")]), "pending": .array([]), "context": context ?? .null])
         } else {
             value = .object([:])
         }

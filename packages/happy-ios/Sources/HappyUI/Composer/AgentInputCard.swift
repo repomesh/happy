@@ -173,12 +173,26 @@ public struct AgentInputChipConfiguration: Equatable, Sendable {
     /// The chip opens its owner's own picker instead of a menu: a press is
     /// `agentInputCard(_:didPress:)`, and `menu` is not drawn.
     public var opensPicker: Bool
+    /// A usage ring before the label (`ChipRingLayout`): what is left of the
+    /// window the selected account warns about. Nil draws none.
+    public var ring: Ring?
 
-    public init(content: Content, accessibilityLabel: String, menu: AgentInputMenu?, opensPicker: Bool = false) {
+    public struct Ring: Equatable, Sendable {
+        public var left: Int
+        public var tone: AccountUsage.Tone
+
+        public init(left: Int, tone: AccountUsage.Tone) {
+            self.left = left
+            self.tone = tone
+        }
+    }
+
+    public init(content: Content, accessibilityLabel: String, menu: AgentInputMenu?, opensPicker: Bool = false, ring: Ring? = nil) {
         self.content = content
         self.accessibilityLabel = accessibilityLabel
         self.menu = menu
         self.opensPicker = opensPicker
+        self.ring = ring
     }
 }
 
@@ -1578,6 +1592,7 @@ final class ComposerChipButton: UIButton {
     }
     private let label = UILabel()
     private let iconView = IconView(size: AgentInputCardLayout.Metrics.permissionIconSize, tint: Palette.text)
+    private let ringView = UsageRingView()
     private var chipConfiguration: AgentInputChipConfiguration?
 
     /// The label, in the chip, from the layout.
@@ -1592,6 +1607,8 @@ final class ComposerChipButton: UIButton {
         label.isUserInteractionEnabled = false
         addSubview(label)
         addSubview(iconView)
+        ringView.isHidden = true
+        addSubview(ringView)
         showsMenuAsPrimaryAction = false
         // The menus list their rows top-down in our order (SwiftUI's
         // `.menuOrder(.fixed)`, which happy-app gets by pre-reversing).
@@ -1620,13 +1637,18 @@ final class ComposerChipButton: UIButton {
         fatalError("init(coder:) is not supported")
     }
 
-    /// The label's or glyph's one-line size.
+    /// The label's or glyph's one-line size, with the ring before it.
     var contentSize: CGSize {
         switch chipConfiguration?.content {
         case .icon: iconView.sizeThatFits(.zero)
-        case .label: label.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude))
+        case .label:
+            chipConfiguration?.ring == nil ? labelSize : ChipRingLayout.contentSize(label: labelSize)
         case nil: .zero
         }
+    }
+
+    private var labelSize: CGSize {
+        label.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude))
     }
 
     /// The card's text size; nil draws the designed 14.
@@ -1654,6 +1676,9 @@ final class ComposerChipButton: UIButton {
         }
         accessibilityLabel = configuration.accessibilityLabel
         alpha = configuration.menu != nil || configuration.opensPicker ? 1 : AgentInputCardLayout.Metrics.disabledChipOpacity
+        ringView.isHidden = configuration.ring == nil
+        if let ring = configuration.ring { ringView.reading = (ring.left, ring.tone) }
+        setNeedsLayout()
         applyMenu()
     }
 
@@ -1680,12 +1705,18 @@ final class ComposerChipButton: UIButton {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        label.frame = labelFrame
         iconView.frame = labelFrame
+        if chipConfiguration?.ring != nil {
+            let split = ChipRingLayout(content: labelFrame, labelHeight: labelSize.height)
+            ringView.frame = split.ring
+            label.frame = split.label
+        } else {
+            label.frame = labelFrame
+        }
     }
 
     override var isHighlighted: Bool {
-        didSet { label.alpha = isHighlighted ? 0.7 : 1; iconView.alpha = label.alpha }
+        didSet { label.alpha = isHighlighted ? 0.7 : 1; iconView.alpha = label.alpha; ringView.alpha = label.alpha }
     }
 
     /// `hitSlop={6}`.

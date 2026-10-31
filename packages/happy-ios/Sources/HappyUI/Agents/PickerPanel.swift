@@ -12,6 +12,8 @@ struct PickerContent: Equatable {
         var text: String
         var left: Int
         var tone: AccountUsage.Tone
+        /// False is the text alone, in the tone's colour ("Signed out").
+        var ring = true
     }
 
     /// One of an account's windows (its name, when it starts over, what is
@@ -68,7 +70,7 @@ enum PickerType {
     }
 
     static func gaugeSize(_ gauge: PickerContent.Gauge) -> CGSize {
-        UsageGaugeLayout(text: size(gauge.text, Self.gauge)).size
+        UsageGaugeLayout(text: size(gauge.text, Self.gauge), ring: gauge.ring).size
     }
 
     /// The width a line asks of its panel.
@@ -158,7 +160,8 @@ final class UsageGaugeView: UIView {
         self.gauge = gauge
         self.strong = strong
         label.text = gauge.text
-        layout = UsageGaugeLayout(text: PickerType.size(gauge.text, PickerType.gauge))
+        layout = UsageGaugeLayout(text: PickerType.size(gauge.text, PickerType.gauge), ring: gauge.ring)
+        track.isHidden = !gauge.ring
         applyColors()
         setNeedsLayout()
     }
@@ -183,7 +186,7 @@ final class UsageGaugeView: UIView {
         track.path = UIBezierPath(ovalIn: ring).cgPath
         let left = CGFloat(gauge?.left ?? 0) / 100
         arc.path = UIBezierPath(arcCenter: CGPoint(x: ring.midX, y: ring.midY), radius: ring.width / 2, startAngle: -.pi / 2, endAngle: -.pi / 2 + 2 * .pi * left, clockwise: true).cgPath
-        arc.isHidden = left <= 0
+        arc.isHidden = left <= 0 || gauge?.ring == false
     }
 }
 

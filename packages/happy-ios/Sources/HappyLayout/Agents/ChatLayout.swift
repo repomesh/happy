@@ -49,6 +49,9 @@ public struct ChatScreenLayout: Equatable, Sendable {
     }
 
     public var card: CGRect
+    /// The context meter's row under the card, its bar under send
+    /// (`ContextMeterLayout`); nil without one.
+    public var meter: CGRect?
     public var headerScrim: CGRect
     /// The transcript's insets inside the whole screen.
     public var listTop: CGFloat
@@ -61,12 +64,22 @@ public struct ChatScreenLayout: Equatable, Sendable {
     /// bar, `headerOverhang` under its foot, feathering out over its last
     /// `headerRamp`: messages never read through the name's capsule, and
     /// fade in only as they pass its foot.
-    public init(size: CGSize, safeArea: LayoutInsets, keyboardTop: CGFloat, cardHeight: (CGFloat) -> CGFloat) {
+    ///
+    /// With a `meter`, its row takes the 8 under the card and 12 more, so
+    /// the card stands 20 above the keyboard and the bar 8 under the card.
+    public init(size: CGSize, safeArea: LayoutInsets, keyboardTop: CGFloat, meter: Bool = false, cardHeight: (CGFloat) -> CGFloat) {
         typealias M = Metrics
         let width = max(0, size.width - 2 * M.paddingH)
         let height = cardHeight(width)
         let foot = min(keyboardTop, size.height - safeArea.bottom)
-        card = CGRect(x: M.paddingH, y: foot - M.paddingBottom - height, width: width, height: height)
+        let below = meter ? ContextMeterLayout.Metrics.height : M.paddingBottom
+        card = CGRect(x: M.paddingH, y: foot - below - height, width: width, height: height)
+        self.meter = meter ? CGRect(
+            x: card.maxX - ContextMeterLayout.Metrics.trailingInset - ContextMeterLayout.Metrics.width,
+            y: card.maxY,
+            width: ContextMeterLayout.Metrics.width,
+            height: ContextMeterLayout.Metrics.height
+        ) : nil
         headerScrim = CGRect(x: 0, y: 0, width: size.width, height: max(0, safeArea.top) + M.headerOverhang)
         listTop = safeArea.top
         listBottom = max(0, size.height - card.minY + M.listGap)
@@ -82,8 +95,14 @@ public struct ChatScreenLayout: Equatable, Sendable {
     /// Whether the card goes compact, decided from `restingCardHeight`: the
     /// full card's height with one line of text at a width. Never from the
     /// card as it is, so going compact (or typing) can't undo itself.
-    public static func compacts(size: CGSize, safeArea: LayoutInsets, keyboardTop: CGFloat, restingCardHeight: (CGFloat) -> CGFloat) -> Bool {
-        ChatScreenLayout(size: size, safeArea: safeArea, keyboardTop: keyboardTop, cardHeight: restingCardHeight).viewport < compactBelow
+    public static func compacts(size: CGSize, safeArea: LayoutInsets, keyboardTop: CGFloat, meter: Bool = false, restingCardHeight: (CGFloat) -> CGFloat) -> Bool {
+        ChatScreenLayout(size: size, safeArea: safeArea, keyboardTop: keyboardTop, meter: meter, cardHeight: restingCardHeight).viewport < compactBelow
+    }
+
+    /// Whether the meter's row shows: whenever there is a meter, except
+    /// under the compact card, where the transcript needs every point.
+    public static func showsMeter(hasGauge: Bool, compact: Bool) -> Bool {
+        hasGauge && !compact
     }
 
     /// Whether the chat hides its navigation bar: only a phone held

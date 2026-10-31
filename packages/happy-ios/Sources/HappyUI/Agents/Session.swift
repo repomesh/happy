@@ -123,7 +123,7 @@ final class Session {
         store = engine.spaces
         images = Images(client: client, offline: offline)
         warm = WarmChats(client: client, store: store, syntax: syntax, persistence: engine)
-        models = ModelState(client: client, offline: offline)
+        models = ModelState(client: client, offline: offline, store: store)
         drafts = Drafts(offline: offline)
         models.load()
         // The rows' drafts: what this phone keeps, then every change, here

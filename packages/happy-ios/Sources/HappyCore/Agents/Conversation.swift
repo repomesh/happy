@@ -244,6 +244,9 @@ public struct ChatSnapshot: Equatable, Sendable {
     /// hasn't taken yet: desktop draws it under the working line, as next
     /// in the queue, until the agent takes it up.
     public var queued = 0
+    /// The provider's latest measurement of the conversation's context
+    /// (the bootstrap's, then each `agent.context.updated`); nil until one.
+    public var context: AgentWire.ContextUsage?
 
     public init() {}
 }
@@ -560,6 +563,7 @@ public actor Conversation {
         // and the send's clock until the run's own events come.
         let awaiting = activeRun != nil && activeRun?.id == nil && (outgoing.contains { $0.accepted } || !pending.isEmpty)
         snapshot.working = start.agent.isWorking || awaiting
+        snapshot.context = start.context
         adoptAgent(start.agent)
         if start.agent.isWorking, let run = history.runs.last, run.status == "running" {
             activeRun = (run.id, run.startedAt)
@@ -672,6 +676,12 @@ public actor Conversation {
         case "agent.draft.updated":
             guard let draft = payload["draft"].flatMap({ Self.decode(AgentWire.Draft.self, $0) }) else { return }
             adoptDraft(draft, publishes: false)
+        case "agent.context.updated":
+            // A complete replacement; null clears it (a fresh conversation).
+            guard let value = payload["context"] else { return }
+            let context = value == .null ? nil : Self.decode(AgentWire.ContextUsage.self, value)
+            guard value == .null || context != nil, context != snapshot.context else { return }
+            snapshot.context = context
         default:
             return
         }
