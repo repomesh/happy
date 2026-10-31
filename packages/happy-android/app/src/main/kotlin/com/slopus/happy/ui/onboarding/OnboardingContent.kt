@@ -35,6 +35,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.slopus.happy.R
+import com.slopus.happy.ui.browser.rememberTextLayout
+import com.slopus.happy.ui.browser.webLinkGestures
 import com.slopus.happy.ui.components.Icon
 import com.slopus.happy.ui.components.Ionicon
 import com.slopus.happy.ui.theme.HappyTheme
@@ -43,6 +45,8 @@ import com.slopus.happy.ui.theme.happyTextStyle
 object OnboardingContentTags {
     const val LINK_TITLE = "onboarding.linkTitle"
     const val INSTALL_ROW = "onboarding.installRow"
+    /** The install step's text, with the desktop site's link. */
+    const val INSTALL_BODY = "onboarding.installBody"
     const val OPEN_ROW = "onboarding.openRow"
     const val ERROR = "onboarding.error"
 }
@@ -130,7 +134,14 @@ fun LinkComputerContent(
                     }
                     append(stringResource(R.string.onboarding_install_body_suffix))
                 }
-                Text(text = body, style = OnboardingContentSpec.body, color = colors.textSecondary)
+                val layout = rememberTextLayout()
+                Text(
+                    text = body,
+                    style = OnboardingContentSpec.body,
+                    color = colors.textSecondary,
+                    onTextLayout = { layout.value = it },
+                    modifier = Modifier.testTag(OnboardingContentTags.INSTALL_BODY).webLinkGestures(body, layout),
+                )
             }
             ChecklistRow(
                 checked = LinkChecklistStep.Open in ticked,

@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.slopus.happy.R
+import com.slopus.happy.ui.browser.rememberLinkMenu
 import com.slopus.happy.ui.components.Alert
 import com.slopus.happy.ui.components.AlertButton
 import com.slopus.happy.ui.components.Avatar
@@ -379,7 +380,8 @@ fun SupportCard(about: AboutInfo, actions: AboutActions) {
  * About (iOS's `aboutRows`, SettingsView.tsx's About without its title):
  * What's New, GitHub with "slopus/happy", Report an Issue, Privacy Policy,
  * Terms of Service and Version, the app's line under the card. No EULA:
- * happy-app shows Apple's on iOS only.
+ * happy-app shows Apple's on iOS only. The four rows that open a page
+ * offer the link menu on a long press, as links in text do.
  */
 @Composable
 fun AboutCard(about: AboutInfo, actions: AboutActions) {
@@ -394,21 +396,25 @@ fun AboutCard(about: AboutInfo, actions: AboutActions) {
             icon = { SettingsTile(Ionicon.LogoGithub, SettingsTiles.gray) },
             detail = "slopus/happy",
             onClick = { actions.onOpenUrl(SettingsSpec.GITHUB_URL) },
+            onLongClick = rememberLinkMenu(SettingsSpec.GITHUB_URL),
         )
         Item(
             title = stringResource(R.string.settings_report_issue),
             icon = { SettingsTile(Ionicon.BugOutline, SettingsTiles.red) },
             onClick = { actions.onOpenUrl(SettingsSpec.ISSUES_URL) },
+            onLongClick = rememberLinkMenu(SettingsSpec.ISSUES_URL),
         )
         Item(
             title = stringResource(R.string.settings_privacy_policy),
             icon = { SettingsTile(Ionicon.ShieldCheckmarkOutline, SettingsTiles.blue) },
             onClick = { actions.onOpenUrl(SettingsSpec.PRIVACY_URL) },
+            onLongClick = rememberLinkMenu(SettingsSpec.PRIVACY_URL),
         )
         Item(
             title = stringResource(R.string.settings_terms_of_service),
             icon = { SettingsTile(Ionicon.DocumentTextOutline, SettingsTiles.gray) },
             onClick = { actions.onOpenUrl(SettingsSpec.TERMS_URL) },
+            onLongClick = rememberLinkMenu(SettingsSpec.TERMS_URL),
         )
         Item(
             title = stringResource(R.string.common_version),

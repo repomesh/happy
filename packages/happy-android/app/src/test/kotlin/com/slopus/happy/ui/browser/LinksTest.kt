@@ -20,8 +20,41 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.text.TextLayoutResult
+import com.slopus.happy.chat.ChatMessage
+import com.slopus.happy.chat.ChatRow
 import com.slopus.happy.chat.markdown.parseMarkdown
 import com.slopus.happy.ui.PHONE
+import com.slopus.happy.ui.artifacts.ArtifactActions
+import com.slopus.happy.ui.artifacts.ArtifactLink
+import com.slopus.happy.ui.artifacts.ArtifactScreen
+import com.slopus.happy.ui.artifacts.ArtifactUi
+import com.slopus.happy.ui.changelog.Changelog
+import com.slopus.happy.ui.changelog.ChangelogEntry
+import com.slopus.happy.ui.changelog.ChangelogScreen
+import com.slopus.happy.ui.changelog.ChangelogTags
+import com.slopus.happy.ui.chat.MessageCallbacks
+import com.slopus.happy.ui.chat.MessageView
+import com.slopus.happy.ui.chat.userMessageBubblePalette
+import com.slopus.happy.ui.connection.PlaceRead
+import com.slopus.happy.ui.connection.SurfaceBody
+import com.slopus.happy.ui.connection.SurfaceScreen
+import com.slopus.happy.ui.home.BotFacePicker
+import com.slopus.happy.ui.home.BotFaceTags
+import com.slopus.happy.ui.home.HomeDockBot
+import com.slopus.happy.ui.onboarding.DESKTOP_URL
+import com.slopus.happy.ui.onboarding.LinkComputerContent
+import com.slopus.happy.ui.onboarding.OnboardingContentTags
+import com.slopus.happy.ui.settings.AboutActions
+import com.slopus.happy.ui.settings.AboutCard
+import com.slopus.happy.ui.settings.AboutInfo
+import com.slopus.happy.ui.settings.SettingsSpec
+import com.slopus.happy.ui.troubleshoot.TroubleshootScreen
+import com.slopus.happy.ui.troubleshoot.TroubleshootTags
 import com.slopus.happy.ui.chat.CopyMenuTags
 import com.slopus.happy.ui.chat.LongPressCopyable
 import com.slopus.happy.ui.chat.MarkdownTags
@@ -39,7 +72,10 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Link taps and long presses in chat Markdown: which browser a tap opens
  * in each mode, and that a long press opens only the link menu (no tap,
- * no copy menu, no text selection), whose choices go where they say.
+ * no copy menu, no text selection), whose choices go where they say. Then
+ * every other place a link is pressed: artifact and Surface documents, a
+ * legacy chat message, What's New, Troubleshoot, onboarding, the bot face
+ * credit and About's rows.
  */
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = PHONE)
@@ -178,6 +214,116 @@ class LinksTest {
         rule.node(MarkdownTags.TEXT).performTouchInput { click(onLink) }
         rule.waitForIdle()
         assertEquals(listOf(url), opened)
+    }
+
+    // Every other place a link can be pressed: a long press opens the menu for its address and
+    // nothing else; a tap still does what it did there.
+
+    /** The middle of [node]'s first link, from its own text layout. */
+    private fun linkCenter(node: SemanticsNodeInteraction): Offset {
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        val layout = layouts.first()
+        val text = layout.layoutInput.text
+        val link = text.getLinkAnnotations(0, text.length).first()
+        return layout.getBoundingBox((link.start + link.end) / 2).center
+    }
+
+    /** Long-presses [node]'s link: only the menu opens, for [address]. Then a tap on it, which the site handles. */
+    private fun assertLinkSite(node: () -> SemanticsNodeInteraction, address: String, calls: Calls) {
+        val at = linkCenter(node())
+        node().performTouchInput { longClick(at) }
+        rule.waitForIdle()
+        rule.node(LinkTags.MENU).assertIsDisplayed()
+        rule.node(LinkTags.URL).assertTextEquals(address)
+        assertTrue("A long press is not a tap", calls.taps.isEmpty())
+        rule.node(LinkTags.COPY).performClick()
+        rule.waitForIdle()
+        node().performTouchInput { click(at) }
+        rule.waitForIdle()
+    }
+
+    @Test fun artifactDocumentLinks() {
+        val calls = Calls()
+        val web = mutableListOf<String>()
+        val document = ArtifactUi.Document("notes.md", blocks, emptyMap(), emptyList())
+        val actions = ArtifactActions(onBack = {}, link = { raw, _ -> ArtifactLink.Web(raw) }, onOpenWeb = { web += it })
+        rule.setHappyContent { ProvideLinks(opener(calls)) { ArtifactScreen("Notes", document, null, "Studio", actions) } }
+        assertLinkSite({ rule.node(MarkdownTags.TEXT) }, url, calls)
+        assertEquals("A tap resolves through the artifact, as before", listOf(url), web)
+        assertTrue(calls.taps.isEmpty())
+    }
+
+    @Test fun surfaceDocumentLinks() {
+        val calls = Calls()
+        rule.setHappyContent {
+            ProvideLinks(opener(calls)) {
+                SurfaceScreen("Plan", PlaceRead.Ready(SurfaceBody.Document("[example link here](https://example.com/page) and more")), {}, {}, {})
+            }
+        }
+        assertLinkSite({ rule.node(MarkdownTags.TEXT) }, url, calls)
+        assertEquals(listOf(url), calls.taps)
+    }
+
+    @Test fun legacyChatMessageLinks() {
+        val calls = Calls()
+        val row = ChatRow.AgentText(ChatMessage.AgentText("m1", 1L, "x"), blocks)
+        rule.setHappyContent {
+            ProvideLinks(opener(calls, proxied = false)) { MessageView(row, userMessageBubblePalette(null, false), MessageCallbacks()) }
+        }
+        assertLinkSite({ rule.node(MarkdownTags.TEXT) }, url, calls)
+        assertEquals(listOf(url), calls.taps)
+    }
+
+    @Test fun changelogSummaryLinks() {
+        val calls = Calls()
+        val changelog = Changelog(listOf(ChangelogEntry("Version 9", summary = "Read [the notes](https://example.com/page) first.")), "Version 9")
+        rule.setHappyContent { ProvideLinks(opener(calls)) { ChangelogScreen(changelog, onViewed = {}, onBack = {}) } }
+        assertLinkSite({ rule.node(ChangelogTags.SUMMARY) }, url, calls)
+        assertEquals(listOf(url), calls.taps)
+    }
+
+    @Test fun troubleshootLinks() {
+        val calls = Calls()
+        val opened = mutableListOf<String>()
+        rule.setHappyContent {
+            ProvideLinks(opener(calls)) { TroubleshootScreen(emptyList(), "x", onOpenMachine = {}, onOpenUrl = { opened += it }, onBack = {}) }
+        }
+        assertLinkSite({ rule.node(TroubleshootTags.DESKTOP_LINK) }, DESKTOP_URL, calls)
+        assertEquals(listOf(DESKTOP_URL), opened)
+    }
+
+    @Test fun onboardingInstallLink() {
+        val calls = Calls()
+        var opened = 0
+        rule.setHappyContent { ProvideLinks(opener(calls)) { LinkComputerContent(onToggle = {}, onOpenDesktopSite = { opened++ }) } }
+        assertLinkSite({ rule.node(OnboardingContentTags.INSTALL_BODY) }, DESKTOP_URL, calls)
+        assertEquals(1, opened)
+    }
+
+    @Test fun botFaceCreditLink() {
+        val calls = Calls()
+        val opened = mutableListOf<String>()
+        val bot = HomeDockBot(creating = true, name = "", faces = listOf(null, null, null, null), slot = 0, artist = "Ada", artistUrl = url)
+        rule.setHappyContent { ProvideLinks(opener(calls)) { BotFacePicker(bot, onPick = {}, onRoll = {}, onOpenUrl = { opened += it }) } }
+        assertLinkSite({ rule.node(BotFaceTags.CREDIT) }, url, calls)
+        assertEquals(listOf(url), opened)
+    }
+
+    @Test fun aboutRowsOfferTheMenuAndStillOpenOnATap() {
+        val calls = Calls()
+        val opened = mutableListOf<String>()
+        rule.setHappyContent { ProvideLinks(opener(calls)) { AboutCard(AboutInfo("1.0"), AboutActions(onOpenUrl = { opened += it })) } }
+        for ((title, address) in listOf("GitHub" to SettingsSpec.GITHUB_URL, "Privacy Policy" to SettingsSpec.PRIVACY_URL)) {
+            rule.onNodeWithText(title).performTouchInput { longClick() }
+            rule.waitForIdle()
+            rule.node(LinkTags.URL).assertTextEquals(address)
+            rule.node(LinkTags.COPY).performClick()
+            rule.waitForIdle()
+        }
+        assertTrue(opened.isEmpty())
+        rule.onNodeWithText("GitHub").performClick()
+        assertEquals(listOf(SettingsSpec.GITHUB_URL), opened)
     }
 
     @Test fun agentLinksBrowseInTheAppAndHandOtherSchemesToTheSystem() {

@@ -873,12 +873,18 @@ iOS's `docs/browser-proxy.md` is the contract; `browser/` ports it
   host workspace's network; a conversation narrows that to its agent's
   workspace. Other schemes go to the system. On a Happy (relay) account a
   tap does exactly what it did before (the system handler). A long press
-  on a Markdown link (`webLinkGestures`) gives a haptic and a bottom sheet:
-  Open in Happy browser (through the agent; on a relay account a Custom
-  Tab on the phone's network), Open in external browser, Copy link, Share.
-  The gesture is taken in the initial pointer pass, so the link's own
-  click, a bubble's copy menu and text selection never also fire; a drag
-  past the touch slop lets go and scrolls (`LinksTest`).
+  on a link gives a haptic and a bottom sheet: Open in Happy browser
+  (through the agent; on a relay account a Custom Tab on the phone's
+  network), Open in external browser, Copy link, Share. Text with links
+  takes `webLinkGestures` (every MarkdownView: chat in both modes, tool
+  plans, artifact and Surface documents, questions, What's New; and the
+  link texts of What's New's summaries, Troubleshoot, onboarding and the
+  bot face credit; a `LinkAnnotation.Clickable` carries its address as its
+  tag); a row that opens a page takes `rememberLinkMenu(url)` as its
+  `onLongClick` (About's rows). The gesture is taken in the initial pointer
+  pass, so the link's own click, a bubble's copy menu and text selection
+  never also fire; a drag past the touch slop lets go and scrolls
+  (`LinksTest`, which covers each site).
 - **Remote only.** Every WebView request goes through `ProxyController`'s
   override to the loopback `BrowserProxy`, with no bypass rules, applied
   before the first load; a WebView without `PROXY_OVERRIDE` shows

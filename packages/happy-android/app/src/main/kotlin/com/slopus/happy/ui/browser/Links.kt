@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -204,6 +205,24 @@ fun Modifier.webLinkGestures(text: AnnotatedString, layout: State<TextLayoutResu
         }
     }
 }
+
+/**
+ * A long press on a control that opens [url] (a settings row): the same
+ * menu as a link in text, [LocalLinkOpener]'s. Null where there is no
+ * opener or [url] isn't a web address, so the control keeps no long press.
+ * Pass it as the control's `onLongClick`; `combinedClickable` gives the
+ * haptic.
+ */
+@Composable
+fun rememberLinkMenu(url: String?): (() -> Unit)? {
+    val opener = LocalLinkOpener.current ?: return null
+    if (url == null || BrowserPolicy.route(url) != BrowserPolicy.Route.Web) return null
+    return remember(opener, url) { { opener.showMenu(url) } }
+}
+
+/** A Text's layout for [webLinkGestures]: give the Text `onTextLayout = { layout.value = it }`. */
+@Composable
+fun rememberTextLayout(): MutableState<TextLayoutResult?> = remember { mutableStateOf(null) }
 
 /** The link annotation under [position], if the point is on its text. */
 internal fun linkAt(text: AnnotatedString, layout: TextLayoutResult, position: Offset): Link? {

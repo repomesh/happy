@@ -33,6 +33,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import com.slopus.happy.R
+import com.slopus.happy.ui.browser.rememberTextLayout
+import com.slopus.happy.ui.browser.webLinkGestures
 import com.slopus.happy.ui.components.Alert
 import com.slopus.happy.ui.components.AlertButton
 import com.slopus.happy.ui.components.HappyAlert
@@ -64,6 +66,8 @@ object TroubleshootTags {
     const val TERMINAL = "troubleshoot.terminal"
     const val COPY = "troubleshoot.copy"
     const val HINT = "troubleshoot.hint"
+    /** The desktop step's text, with its link. */
+    const val DESKTOP_LINK = "troubleshoot.desktopLink"
 }
 
 /** troubleshoot.tsx styles. */
@@ -162,7 +166,14 @@ fun TroubleshootScreen(
                         }
                         append(stringResource(R.string.troubleshoot_desktop_body_suffix))
                     }
-                    Text(text = text, style = TroubleshootSpec.stepBody, color = colors.textSecondary)
+                    val layout = rememberTextLayout()
+                    Text(
+                        text = text,
+                        style = TroubleshootSpec.stepBody,
+                        color = colors.textSecondary,
+                        onTextLayout = { layout.value = it },
+                        modifier = Modifier.testTag(TroubleshootTags.DESKTOP_LINK).webLinkGestures(text, layout),
+                    )
                 }
                 Step(Ionicon.TerminalOutline, stringResource(R.string.troubleshoot_terminal_step)) {
                     StepBody(stringResource(R.string.troubleshoot_terminal_body))
