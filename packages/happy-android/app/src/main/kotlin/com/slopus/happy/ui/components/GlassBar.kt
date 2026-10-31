@@ -80,7 +80,7 @@ fun GlassBarLayout(
     source: GlassSource? = null,
     content: @Composable (top: Dp) -> Unit,
 ) {
-    val own = rememberGlassSource()
+    val own = rememberGlassSource(ground)
     val glass = source ?: own
     val blurs = rememberGlassBlur()
     SubcomposeLayout(modifier) { constraints ->

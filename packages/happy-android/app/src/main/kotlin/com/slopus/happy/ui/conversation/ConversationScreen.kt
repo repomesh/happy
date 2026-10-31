@@ -198,7 +198,7 @@ fun ConversationScreen(
     // The dock floats over the transcript, which scrolls on under its glass; the list keeps the
     // dock's height free at its newest end, so the last message is never left under it. The bar
     // is glass too, over the same recording: older messages scroll on under it, softened.
-    val glass = rememberGlassSource()
+    val glass = rememberGlassSource(colors.surface)
     val blurs = rememberGlassBlur()
     var dock by remember { mutableIntStateOf(0) }
     val dockHeight = with(LocalDensity.current) { dock.toDp() }

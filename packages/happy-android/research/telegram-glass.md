@@ -92,6 +92,39 @@ off by default.
 about 60 px) becomes a sigma of about 7.6 px on it. Cheap. The cost is the re-recording on
 scroll, which the hashes keep to dirty rects.
 
+**The ground under the blur.** Every frosted source starts with an opaque colour: the chat
+list's `renderNodeUpdateDisplayList` does `drawColor(windowBackgroundWhite)` before the
+blurred parts, and the chat's source has the wallpaper as its `underSource`
+(`BlurredBackgroundSourceRenderNode.draw` draws `underSource` first). What the tint lies on
+is therefore opaque: the window's colour with the blurred content over it. The sharp content
+under the bar never shows through.
+
+## Why there was no blur on the device (fixed 2026-10-31)
+
+The first port (below) took Telegram's numbers but left out that opaque ground. Our content
+layer (`glassSource`) records the content without the screen's background, which is painted
+by a modifier outside it (`Modifier.background(colors.surface)` on the screen). So the
+blurred copy was mostly transparent: thin text blurred at a 61 px sigma fades to almost
+nothing. The bar then drew a 70–85% tint over that, and below the bar the real, sharp
+content still showed through the remaining 15–30%. On the Fold, in dark mode, the
+transcript read clearly through the agent chat's title ("sharp, slightly dimmed"). It
+looked like no blur at all because the only thing visible under the tint was the
+unblurred original. Robolectric doesn't draw RenderEffect, so the tests never saw it.
+
+The fix is Telegram's structure: `GlassSource` carries the screen's `ground`
+(`rememberGlassSource(ground)`; `GlassBarLayout` passes its `ground`, the agent chat its
+`colors.surface`). Each glass draws that ground, then the blurred content, then the tint
+(`drawSource`, Telegram's `BlurredBackgroundSourceRenderNode.draw` with `underSource`).
+Each glass also blurs 48 dp of content around itself, not just its own rect, kept to the
+source's bounds (`GlassSpec.capture`, Telegram's `rectf.inset(0, -dp(45..48))`), so
+content near the bar glows into it before it slides under, instead of the blur clamping
+at the bar's edge.
+
+Checked on the Galaxy Z Fold7 inner display (1968×2184, 420 dpi), light and dark, on agent
+home, an agent chat, legacy home and its chat, and settings. Screenshots in
+`.context/shots/device/` (not committed): `before-agentchat-dark.png` shows sharp text
+under the title; `after-*` show it frosted.
+
 ## Ours before this change (`ui/components/Glass.kt`)
 
 | | ours (before) | Telegram |
@@ -140,11 +173,11 @@ scroll, which the hashes keep to dirty rects.
   that job instead.
 - **No liquid-glass refraction pass.** It is off by default in Telegram too.
 - **No old-path blur below API 31.** Telegram's bitmap path runs a CPU blur on a thread.
-  Ours shows the tint at 0.94 instead.
+  Ours shows the tint at 0.94 over the ground instead, which is opaque, as Telegram's is with blur off.
 
 ## Screenshots
 
-The before and after Robolectric renders are in `.context/shots/glass-before/` and
-`.context/shots/glass-after/` (not committed). Robolectric draws RenderEffect only partly,
-so the blur's real strength needs a device or emulator to judge. No Telegram reference
-screenshot was taken: nothing was installed on the shared phones.
+Robolectric doesn't draw RenderEffect blur, so judge the glass on a device. The first
+port was checked only in Robolectric and shipped without visible blur (see "Why there was
+no blur on the device"). The device screenshots are in `.context/shots/device/` (not
+committed).
