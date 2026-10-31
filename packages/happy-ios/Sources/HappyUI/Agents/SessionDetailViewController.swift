@@ -40,7 +40,7 @@ final class SessionDetailViewController: UIViewController, UIGestureRecognizerDe
     private var pendingAsk = (media: false, links: false)
     private var reader = Shared.Reader()
     private var previewing: Task<Void, Never>?
-    private lazy var loader = MediaLoader(client: session.client, agentId: agentId)
+    private lazy var loader = MediaLoader(client: session.client, agentId: agentId, library: session.media)
     private var preview: FilePreview?
     /// Four rows of media, five links; each "Show more" as many again.
     private static let mediaPage = 12

@@ -26,6 +26,7 @@ enum SettingsIndex {
     static var scanTerminal: Entry { Entry(id: "scan-terminal", title: Strings.connectTerminal, glyph: "qr-code-outline", tile: .indigo) }
     static var enterTerminal: Entry { Entry(id: "enter-terminal", title: Strings.enterTerminalURL, glyph: "link-outline", tile: .indigo) }
     static var supportUs: Entry { Entry(id: "support-us", title: Strings.SupportUs.title, glyph: "heart-outline", tile: .red) }
+    static var dataStorage: Entry { Entry(id: "data-storage", title: Strings.DataStorage.title, glyph: "server-outline", tile: .green) }
     static var appearance: Entry { Entry(id: "appearance", title: Strings.Settings.appearance, glyph: "color-palette-outline", tile: .purple) }
     static var about: Entry { Entry(id: "about", title: Strings.Settings.about, glyph: "information-circle-outline", tile: .gray) }
     static var connectAgent: Entry { Entry(id: "connect-agent", title: Strings.SettingsActions.addAgent, glyph: "add-outline", tile: .action) }
@@ -42,14 +43,14 @@ enum SettingsIndex {
     /// picture's menu (the two asks) included, in their order. Disconnect is left
     /// out: a search doesn't offer to take the computer away.
     static var computer: [Entry] {
-        [profile, changeAgentName, changeAgentAvatar, appearance, hideProjects, supportUs, connectAgent, addAccount] + aboutRows
+        [profile, changeAgentName, changeAgentAvatar, appearance, hideProjects, dataStorage, supportUs, connectAgent, addAccount] + aboutRows
     }
 
     /// What a Happy account's settings show under its accounts card, in
     /// their order: the same places as a computer's, with the account's own
     /// pages beside them. Sign out is left out, as Disconnect is.
     static var happyAccount: [Entry] {
-        [account, backupRestore, appearance, language, voice, agents, scanTerminal, enterTerminal, supportUs] + aboutRows
+        [account, backupRestore, appearance, language, voice, agents, dataStorage, scanTerminal, enterTerminal, supportUs] + aboutRows
     }
 
     /// The About page's rows.

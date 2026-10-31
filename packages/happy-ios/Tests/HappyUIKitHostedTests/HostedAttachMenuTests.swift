@@ -452,7 +452,7 @@ final class HostedAttachMenuTests: XCTestCase {
         host.backgroundColor = UIColor(Palette.surface)
         window.rootViewController?.view.addSubview(host)
         // Waiting its turn: the short arc, not a whole ring.
-        XCTAssertEqual(UploadRingView().drawn, UploadRingLayout.waitingShare)
+        XCTAssertEqual(MediaRingView().drawn, UploadRingLayout.waitingShare)
         let tile = ChatMediaView(frame: CGRect(x: 60, y: 200, width: 240, height: 180))
         tile.backgroundColor = .systemTeal
         host.addSubview(tile)
@@ -507,7 +507,7 @@ final class HostedAttachMenuTests: XCTestCase {
         try XCTUnwrap(view("attach-send", in: sheet.view) as? UIControl).sendActions(for: .touchUpInside)
 
         // Both tiles get rings; each only ever moves forward.
-        var seen: [ObjectIdentifier: [UploadRingView.State]] = [:]
+        var seen: [ObjectIdentifier: [MediaRingView.State]] = [:]
         let deadline = ContinuousClock.now + .seconds(60)
         var tiles: [ChatMediaView] = []
         var keeping: Task<Void, Error>?
@@ -539,7 +539,7 @@ final class HostedAttachMenuTests: XCTestCase {
         XCTAssertTrue(sends.first?["text"]?.stringValue?.contains(uploads.first ?? "-") == true, "the message doesn't name the upload")
         XCTAssertEqual(sends.first?["content"]?.arrayValue?.count, 1, "the photo went inline")
         // Taken: the rings are let go.
-        try await wait(10) { tiles.allSatisfy { $0.ring?.isHidden ?? true } }
+        try await wait(10) { tiles.allSatisfy { $0.ring.map { $0.isHidden || $0.state == .play } ?? true } }
     }
 }
 #endif

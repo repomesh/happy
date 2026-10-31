@@ -622,9 +622,10 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
     }
 
     private func makeChatAttachments() -> ChatAttachmentImages {
-        ChatAttachmentImages(
-            pictures: account.attachmentPictures, sessionId: chatId, files: account.filesDirectory, load: services.attachment
-        )
+        if let source = services.attachmentSource {
+            return ChatAttachmentImages(pictures: account.attachmentPictures, sessionId: chatId, files: account.filesDirectory, library: account.media, source: source)
+        }
+        return ChatAttachmentImages(pictures: account.attachmentPictures, sessionId: chatId, files: account.filesDirectory, load: services.attachment)
     }
 
     /// Apply the background projection once the views exist. Observations
@@ -1906,6 +1907,8 @@ final class LegacyChatViewController: UIViewController, ChatListViewDelegate, Ch
         case .openMedia, .openArtifact:
             // Only V2 conversations show media and artifacts.
             break
+        case .toggleDownload(let ref):
+            chatAttachments?.toggle(ref)
         }
     }
 

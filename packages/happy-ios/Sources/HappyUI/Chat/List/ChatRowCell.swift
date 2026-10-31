@@ -111,6 +111,7 @@ final class ChatPlanView: UIView {
     private var webImages: [ChatWebImageView] = []
     private var mermaids: [ChatMermaidView] = []
     private var media: [ChatMediaView] = []
+    private var fileStatuses: [ChatFileStatusView] = []
     private var stories: [StoryInlineView] = []
     private var pages: [InlinePageView] = []
 
@@ -211,6 +212,7 @@ final class ChatPlanView: UIView {
         var webImageIndex = 0
         var mermaidIndex = 0
         var mediaIndex = 0
+        var fileStatusIndex = 0
         var storyIndex = 0
         var pageIndex = 0
         var order: [UIView] = []
@@ -323,6 +325,11 @@ final class ChatPlanView: UIView {
                 view.setLayoutFrame(frame)
                 view.apply(item)
                 order.append(view)
+            case .fileStatus(let status, let frame):
+                let view = take(&fileStatuses, &fileStatusIndex) { ChatFileStatusView() }
+                view.setLayoutFrame(frame)
+                view.apply(status)
+                order.append(view)
             case .embed(.story(let id), let frame):
                 let view = take(&stories, &storyIndex) { StoryInlineView() }
                 view.setLayoutFrame(frame)
@@ -373,6 +380,10 @@ final class ChatPlanView: UIView {
             view.isHidden = true
         }
         for view in media[mediaIndex...] {
+            view.apply(nil)
+            view.isHidden = true
+        }
+        for view in fileStatuses[fileStatusIndex...] {
             view.apply(nil)
             view.isHidden = true
         }
@@ -465,7 +476,7 @@ extension ChatDrawItem {
         case .box(let box), .pulse(let box): box.frame
         case .text(_, let frame), .icon(_, _, let frame, _), .spinner(let frame, _, _), .shimmer(_, let frame), .elapsed(_, let frame, _),
              .diff(_, let frame, _, _, _, _), .diffHeader(_, _, let frame), .scroller(_, let frame, _, _), .attachment(_, let frame),
-             .webImage(_, let frame, _), .mermaid(_, let frame), .media(_, let frame), .embed(_, let frame): frame
+             .webImage(_, let frame, _), .mermaid(_, let frame), .media(_, let frame), .fileStatus(_, let frame), .embed(_, let frame): frame
         }
     }
 }

@@ -50,6 +50,8 @@ public final class AccountSession: Sendable {
     public let pendingChats = PendingChats()
     /// The session pictures the chat has decoded, this account's alone.
     public let attachmentPictures = AttachmentPictures()
+    /// Its attachments, kept on this phone for good (`MediaLibrary`).
+    public let media: MediaLibrary
     public let avatarPictures: AvatarPictures
     /// What each file looked like when last read (the store's
     /// `sessionFileCache`), this account's alone. Disk reads stay under the
@@ -107,6 +109,7 @@ public final class AccountSession: Sendable {
         self.filesDirectory = filesDirectory ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("happy-files-\(keys.anonID)", isDirectory: true)
         self.fileCache = SessionFileCache(directory: fileCacheDirectory)
+        self.media = MediaLibrary.legacy(accountID: keys.anonID, filesDirectory: self.filesDirectory)
         self.api = HappyAPI(serverURL: dependencies.serverURL, clientID: dependencies.clientID, transport: dependencies.transport)
             .authenticated(token: credentials.token)
         self.avatarPictures = AvatarPictures(owner: keys.anonID,
@@ -227,6 +230,7 @@ public final class AccountSession: Sendable {
     }
 
     public func stop() async {
+        MediaLibrary.forget(namespace: media.namespace)
         await archiveVisibilityWriter.close()
         await avatarPictures.close()
         newSessionDraftHeight.close()

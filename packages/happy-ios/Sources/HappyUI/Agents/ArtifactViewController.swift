@@ -105,7 +105,7 @@ final class ArtifactViewController: UIViewController, ChatMediaProviding {
             guard let file = version.files.first(where: { $0.path == path }) ?? (path == entry.path ? entry : nil) else {
                 return show(message: Strings.artifactUnavailable)
             }
-            let media = ArtifactMedia(client: client, artifactId: artifact.id, version: version.number)
+            let media = ArtifactMedia(client: client, artifactId: artifact.id, version: version.number, library: session.media)
             self.media = media
             if Self.isMarkdown(file) {
                 try await showDocument(file, version: version, media: media)

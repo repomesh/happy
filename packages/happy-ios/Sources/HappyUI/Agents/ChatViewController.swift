@@ -229,7 +229,7 @@ final class ChatViewController: UIViewController, ComposeHosting {
         }
         tappedAt = previewing ? nil : session.warm.takeTap(agentId)
         proposals = SidebarProposals(client: session.client, store: session.store)
-        media = MediaLoader(client: session.client, agentId: agentId)
+        media = MediaLoader(client: session.client, agentId: agentId, library: session.media)
         let files = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Agents", isDirectory: true)
         pictures = ComposerImagePicker(staging: ComposerAttachmentStaging(filesDirectory: files), maxFileBytes: AttachmentRules.maxFileBytes)
         super.init(nibName: nil, bundle: nil)
@@ -1703,6 +1703,9 @@ final class ChatViewController: UIViewController, ComposeHosting {
             Task { await conversation.removeAttachment(messageId, key: piece) }
         case .openMedia(let key):
             open(key)
+        case .toggleDownload(let key):
+            // Here already: the ring is gone, so the tap opens it.
+            if media.isDownloaded(key) { open(key) } else { media.toggleDownload(key) }
         case .openArtifact(let artifact):
             navigationController?.pushViewController(ArtifactViewController(session: session, artifact: artifact), animated: true)
         case .toggleTool(let messageId):

@@ -18,31 +18,56 @@ protocol ChatMediaProviding: AnyObject {
 protocol ChatMediaSource: AnyObject {
     func cachedImage(_ key: String, pixels: Int) -> UIImage?
     func image(_ key: String, pixels: Int) async -> UIImage?
+    /// The download behind a key, where the source keeps its media on this
+    /// phone (`MediaLibrary`); nil for one it doesn't.
+    func download(_ key: String) -> ChatDownload?
+    /// Puts where the download is on the board, read off the main thread.
+    func publishDownload(_ key: String)
+}
+
+extension ChatMediaSource {
+    func download(_ key: String) -> ChatDownload? { nil }
+    func publishDownload(_ key: String) {}
+}
+
+/// One media file on its way to this phone, as a tile follows it: its
+/// progress on `DownloadBoard` under `boardKey`, and a video's length once
+/// known, for the badge.
+struct ChatDownload: Equatable {
+    var boardKey: String
+    var duration: Double?
 }
 
 /// Desktop's MediaImageTile and MediaVideoTile: the thumbhash in
 /// `surface-pressed` from the first frame, the picture faded in over it
 /// (`ImageFade`), a hairline over the whole tile and corners rounded 8. A
-/// recording shows its first frame under a play button; a tap plays it. A
-/// picture that failed keeps its placeholder under a quiet glyph and is
-/// asked for again when the computer is back (`MediaLoader.retry`).
-final class ChatMediaView: UIView, UploadRingTile {
+/// recording shows its first frame under Telegram's play button; a tap
+/// plays it at once, streaming. A file still to download shows Telegram's
+/// ring (the arrow, or how far it is) and its size in the badge; a video
+/// its length there too. A picture that failed keeps its placeholder
+/// under a quiet glyph and is asked for again when the computer is back
+/// (`MediaLoader.retry`).
+final class ChatMediaView: UIView, UploadRingTile, DownloadShowing {
     nonisolated static let radius: CGFloat = 8
     static let playIconSize: CGFloat = 22
 
     private let placeholder = UIImageView()
     private let picture = UIImageView()
     private let outline = UIView()
-    private let play = UIView()
-    private let playIcon = UIImageView()
     private let failure = UIImageView()
     /// Still going to the computer: the tile dimmed under its ring.
     private let dim = UIView()
-    private(set) var ring: UploadRingView?
+    /// The upload's or download's ring, and a video's play button.
+    private(set) var ring: MediaRingView?
+    /// The size, a video's length, how much is here.
+    private(set) var badge: MediaBadgeView?
     private var failed = false
     private var media: ChatMedia?
     private var loadedPixels = 0
     private var task: Task<Void, Never>?
+    /// The download it follows, and where it is.
+    private(set) var download: ChatDownload?
+    private(set) var downloadPhase: DownloadPhase?
 
     /// The thumbhash shown under the picture, for tests.
     var placeholderImage: UIImage? { placeholder.image }
@@ -66,13 +91,6 @@ final class ChatMediaView: UIView, UploadRingTile {
             view.clipsToBounds = true
             addSubview(view)
         }
-        play.backgroundColor = UIColor(Palette.playFill)
-        play.layer.cornerRadius = MediaFlow.playSize / 2
-        playIcon.contentMode = .center
-        playIcon.image = .icon(.ionicons("play"), size: Self.playIconSize)
-        playIcon.tintColor = UIColor(Palette.playGlyph)
-        play.addSubview(playIcon)
-        addSubview(play)
         failure.contentMode = .center
         failure.image = .icon(.ionicons("image-outline"), size: Self.playIconSize - 2)
         failure.tintColor = UIColor(Palette.mediaFailed)
@@ -106,6 +124,7 @@ final class ChatMediaView: UIView, UploadRingTile {
         if let media, same == self.media {
             self.media = media
             follow(media.upload)
+            followDownload()
             return
         }
         task?.cancel()
@@ -118,13 +137,22 @@ final class ChatMediaView: UIView, UploadRingTile {
         picture.layer.removeAllAnimations()
         picture.alpha = 1
         picture.image = nil
-        play.isHidden = media?.isVideo != true
         accessibilityLabel = media?.label
         accessibilityTraits = media?.isVideo == true ? .button : .image
         accessibilityValue = Strings.mediaLoading
         follow(media?.upload)
+        followDownload()
         setNeedsLayout()
         loadIfNeeded()
+    }
+
+    private func makeRing() -> MediaRingView {
+        if let ring { return ring }
+        let ring = MediaRingView()
+        insertSubview(ring, belowSubview: outline)
+        self.ring = ring
+        setNeedsLayout()
+        return ring
     }
 
     // MARK: Uploading
@@ -137,9 +165,8 @@ final class ChatMediaView: UIView, UploadRingTile {
         if let following, following != upload?.key { UploadRings.shared.forget(self, key: following) }
         following = upload?.key
         guard let upload else {
-            ring?.isHidden = true
             dim.isHidden = true
-            play.isHidden = media?.isVideo != true
+            refreshRing(animated: false)
             return
         }
         UploadRings.shared.show(self, key: upload.key)
@@ -149,14 +176,8 @@ final class ChatMediaView: UIView, UploadRingTile {
     /// Where its bytes are: what `UploadRings` applies, a frame at a time.
     func setUpload(_ phase: UploadPhase?, animated: Bool) {
         guard let upload = media?.upload else { return }
-        let ring = self.ring ?? {
-            let ring = UploadRingView()
-            insertSubview(ring, belowSubview: outline)
-            self.ring = ring
-            setNeedsLayout()
-            return ring
-        }()
-        let state: UploadRingView.State
+        let ring = makeRing()
+        let state: MediaRingView.State
         if upload.failed { state = .failed }
         else {
             switch phase {
@@ -165,28 +186,99 @@ final class ChatMediaView: UIView, UploadRingTile {
             case .done: state = .done
             }
         }
-        ring.set(state, animated: animated)
+        badge?.setLines([])
         let going = state != .done
-        play.isHidden = true
-        if going { dim.isHidden = false; dim.alpha = 1 }
-        else if animated, !dim.isHidden {
+        if going {
+            ring.set(state, animated: animated)
+            dim.isHidden = false
+            dim.alpha = 1
+        } else if animated, !dim.isHidden {
+            // Sent: the ring shrinks away, then a video's play button shows.
+            ring.set(.done, animated: true)
             UIView.animate(withDuration: 0.25) { self.dim.alpha = 0 } completion: { _ in
-                if self.ring?.state == .done { self.dim.isHidden = true; self.play.isHidden = self.media?.isVideo != true }
+                guard self.ring?.state == .done else { return }
+                self.dim.isHidden = true
+                if self.media?.isVideo == true { self.ring?.set(.play, animated: false) }
             }
         } else {
             dim.isHidden = true
-            play.isHidden = media?.isVideo != true
+            ring.set(media?.isVideo == true ? .play : .done, animated: false)
         }
         switch state {
         case .waiting: accessibilityValue = Strings.Upload.waiting
         case .progress(let share): accessibilityValue = Strings.Upload.uploading(Int((share * 100).rounded(.down)))
         case .failed: accessibilityValue = Strings.Upload.failed
-        case .done: accessibilityValue = picture.image == nil ? Strings.mediaLoading : Strings.mediaLoaded
+        default: accessibilityValue = picture.image == nil ? Strings.mediaLoading : Strings.mediaLoaded
+        }
+    }
+
+    // MARK: Downloading
+
+    /// Follows the download behind the tile, once its source can be found.
+    private func followDownload() {
+        let found = media.flatMap { $0.upload == nil ? source()?.download($0.key) : nil }
+        if let old = download?.boardKey, old != found?.boardKey { DownloadRings.shared.forget(self, key: old) }
+        download = found
+        guard let found else {
+            downloadPhase = nil
+            refreshRing(animated: false)
+            return
+        }
+        DownloadRings.shared.show(self, key: found.boardKey)
+        let phase = DownloadRings.shared.phase(found.boardKey)
+        if phase == nil, let media { source()?.publishDownload(media.key) }
+        setDownload(phase, animated: false)
+    }
+
+    /// Where the download is: what `DownloadRings` applies, a frame at a time.
+    func setDownload(_ phase: DownloadPhase?, animated: Bool) {
+        let was = downloadPhase
+        downloadPhase = phase
+        refreshRing(animated: animated)
+        // Here now: the picture it waited for.
+        if phase?.isComplete == true, was?.isComplete != true, picture.image == nil || media?.isVideo == true {
+            task?.cancel()
+            task = nil
+            loadedPixels = 0
+            setFailed(false)
+            loadIfNeeded()
+        }
+    }
+
+    /// The ring and badge for what it shows now, when it isn't uploading.
+    private func refreshRing(animated: Bool) {
+        guard let media, media.upload == nil else { return }
+        let video = media.isVideo
+        if download == nil {
+            if video { makeRing().set(.play, animated: false) } else { ring?.set(.done, animated: false) }
+            badge?.setLines([])
+            return
+        }
+        let state = MediaRingView.state(downloadPhase, video: video)
+        if state == .done { ring?.set(.done, animated: animated) } else { makeRing().set(state, animated: animated) }
+        var lines: [String] = []
+        if video, let duration = download?.duration { lines.append(MediaSizeText.duration(duration)) }
+        if let phase = downloadPhase, !phase.isComplete || (video && lines.isEmpty), let size = MediaSizeText.text(phase) { lines.append(size) }
+        if !lines.isEmpty, badge == nil {
+            let badge = MediaBadgeView()
+            insertSubview(badge, belowSubview: outline)
+            self.badge = badge
+        }
+        badge?.setLines(lines)
+        setNeedsLayout()
+        if failed, downloadPhase.map({ !$0.isComplete }) == true { setFailed(false) }
+        switch downloadPhase {
+        case .remote(let total)?: accessibilityValue = total.map { Strings.Download.size(MediaSizeText.size($0)) } ?? Strings.Download.notDownloaded
+        case .downloading?: accessibilityValue = downloadPhase?.share.map { Strings.Download.downloading(Int(($0 * 100).rounded(.down))) } ?? Strings.Download.waiting
+        case .paused?: accessibilityValue = Strings.Download.paused(Int(((downloadPhase?.share ?? 0) * 100).rounded(.down)))
+        case .failed?: accessibilityValue = Strings.Download.failed
+        case .complete?, nil: accessibilityValue = picture.image == nil ? Strings.mediaLoading : Strings.mediaLoaded
         }
     }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        if window != nil, download == nil, media?.upload == nil { followDownload() }
         loadIfNeeded()
     }
 
@@ -195,11 +287,12 @@ final class ChatMediaView: UIView, UploadRingTile {
         placeholder.frame = bounds
         picture.frame = bounds
         outline.frame = bounds
-        play.frame = MediaFlow.playButton(in: bounds.size)
-        failure.frame = play.frame
-        playIcon.frame = play.bounds
+        failure.frame = MediaFlow.playButton(in: bounds.size)
         dim.frame = bounds
         ring?.frame = UploadRingLayout.disc(in: bounds.size)
+        if let badge, !badge.isHidden {
+            badge.apply(MediaStatusLayout.badge(in: bounds.size, lines: badge.lineSizes()))
+        }
         loadIfNeeded()
     }
 
@@ -223,10 +316,17 @@ final class ChatMediaView: UIView, UploadRingTile {
             let image = await source.image(media.key, pixels: pixels)
             guard !Task.isCancelled, let self, self.media == media else { return }
             self.task = nil
+            // A video's length is known once its first frame is.
+            if media.isVideo, let found = source.download(media.key), found != self.download {
+                self.download = found
+                self.refreshRing(animated: false)
+            }
             guard let image else {
                 // Not again until asked: the computer may be away.
                 self.loadedPixels = pixels
-                if self.picture.image == nil { self.setFailed(true) }
+                // Waiting for a tap, or showing how its download went: the ring says so.
+                let waiting = self.download != nil && self.downloadPhase?.isComplete != true
+                if self.picture.image == nil, !waiting { self.setFailed(true) }
                 return
             }
             self.show(image, pixels: pixels, fade: true)
@@ -251,7 +351,7 @@ final class ChatMediaView: UIView, UploadRingTile {
         let first = picture.image == nil
         loadedPixels = pixels
         picture.image = image
-        accessibilityValue = Strings.mediaLoaded
+        if downloadPhase == nil || downloadPhase?.isComplete == true { accessibilityValue = Strings.mediaLoaded }
         guard first, fade else {
             placeholder.image = nil
             return

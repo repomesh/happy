@@ -636,6 +636,22 @@ public actor LegacySyncEngine {
         return plaintext
     }
 
+    /// Where a session attachment's bytes come from, for the account's
+    /// `MediaLibrary`: its sealed blob a range at a time, opened with the
+    /// session's blob key. `size` is the plaintext's, as the file event
+    /// says it.
+    public func attachmentSource(sessionId: String, ref: String, size: Int?) throws -> MediaSource {
+        ThreadRules.assertOffMain()
+        guard !stopped, let session = try store.session(id: sessionId),
+              let key = keyRing.blobKey(wrappedKey: session.dataKeyCipher) else {
+            throw SendingError.unknownSession
+        }
+        let links = AttachmentLinks(api: api, sessionId: sessionId, ref: ref)
+        return MediaSource(length: size.map { $0 + MediaSeal.header }, seal: MediaSeal(key: key)) { range in
+            try await links.fetch(range)
+        }
+    }
+
     static func filePayload(id: String, time: Int64, attachment: AttachmentRecord, ref: String) -> JSONValue {
         var event: [String: JSONValue] = [
             "t": .string("file"),
@@ -745,6 +761,8 @@ public actor LegacySyncEngine {
                         try checkDelivery(item, session: session)
                         board.set(key, .done)
                         attachment.ref = upload.ref
+                        // Kept as sent: the sender never downloads its own file.
+                        try? MediaStore(directory: MediaLibrary.legacyDirectory(filesDirectory: directory)).keep(upload.ref, data: bytes)
                         if try store.outbox(localId: item.localId) != nil {
                             try store.saveAttachment(attachment)
                         }
@@ -968,5 +986,37 @@ public actor LegacySyncEngine {
         case .machineStatus, .sessionEvent, .unsupported:
             break
         }
+    }
+}
+
+/// An attachment's link, asked for once and kept while it is good:
+/// presigned URLs last 15 minutes, so one is used for 10, and asked for
+/// again when the server refuses it.
+actor AttachmentLinks {
+    private let api: HappyAPI
+    private let sessionId: String
+    private let ref: String
+    private var link: (url: URL, headers: [String: String], at: ContinuousClock.Instant)?
+
+    init(api: HappyAPI, sessionId: String, ref: String) {
+        self.api = api
+        self.sessionId = sessionId
+        self.ref = ref
+    }
+
+    func fetch(_ range: Range<Int>) async throws -> MediaPiece {
+        do {
+            return try await api.attachmentRange(try await current(), range: range)
+        } catch MediaError.status(let status) where status == 403 || status == 400 {
+            link = nil
+            return try await api.attachmentRange(try await current(), range: range)
+        }
+    }
+
+    private func current() async throws -> (url: URL, headers: [String: String]) {
+        if let link, ContinuousClock.now - link.at < .seconds(600) { return (link.url, link.headers) }
+        let fresh = try await api.attachmentLink(sessionId: sessionId, ref: ref)
+        link = (fresh.url, fresh.headers, ContinuousClock.now)
+        return fresh
     }
 }

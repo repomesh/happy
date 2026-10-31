@@ -12,19 +12,32 @@ protocol ChatAttachmentProviding: AnyObject {
     var chatAttachments: ChatAttachmentImages? { get }
 }
 
-/// useAttachmentImage for one session of one account: its pictures,
-/// downloaded and decrypted by `load`, decoded off the main thread at no
-/// more than FileView draws, and kept in the account's own
-/// `AttachmentPictures`, never another account's. Their thumbhashes are
-/// `ThumbHashImages`', which the view sets while it is configured.
+/// useAttachmentImage for one session of one account: its pictures, read
+/// into the account's `MediaLibrary` once and kept there for good (sealed
+/// on the server, opened as they arrive and kept only once their MAC
+/// checks), decoded off the main thread at no more than FileView draws,
+/// and kept decoded in the account's own `AttachmentPictures`, never
+/// another account's. A picture reads itself when automatic download
+/// allows it (`MediaAutoDownload`), else on a tap on its ring. Their
+/// thumbhashes are `ThumbHashImages`', which the view sets while it is
+/// configured.
 @MainActor
 final class ChatAttachmentImages: NSObject {
+    typealias Source = @Sendable (_ ref: String, _ size: Int?) async throws -> MediaSource
+
     private let pictures: AttachmentPictures
     private let sessionId: String
-    private let load: @Sendable (_ ref: String) async throws -> Data
+    private let load: (@Sendable (_ ref: String) async throws -> Data)?
     /// The account's outbox files, where a picture not yet sent is kept.
     private let files: URL?
+    private let library: MediaLibrary?
+    private let source: Source?
+    private var sources: [String: MediaSource] = [:]
+    /// Pictures a person tapped, read whatever the rules say.
+    private var requested: Set<String> = []
+    private var rules = MediaAutoDownload.load()
 
+    /// Whole pictures from `load`, with no library: tests and fixtures.
     init(
         pictures: AttachmentPictures,
         sessionId: String,
@@ -35,24 +48,85 @@ final class ChatAttachmentImages: NSObject {
         self.sessionId = sessionId
         self.files = files
         self.load = load
+        library = nil
+        source = nil
         super.init()
         NotificationCenter.default.addObserver(self, selector: #selector(memoryWarning), name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+    }
+
+    init(pictures: AttachmentPictures, sessionId: String, files: URL? = nil, library: MediaLibrary, source: @escaping Source) {
+        self.pictures = pictures
+        self.sessionId = sessionId
+        self.files = files
+        self.library = library
+        self.source = source
+        load = nil
+        super.init()
+        NotificationCenter.default.addObserver(self, selector: #selector(memoryWarning), name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(rulesChanged), name: MediaAutoDownload.didChange, object: nil)
     }
 
     @objc private func memoryWarning() {
         pictures.removeAll()
     }
 
+    @objc private func rulesChanged() {
+        rules = MediaAutoDownload.load()
+    }
+
     func cached(_ ref: String) -> UIImage? {
         pictures.cached(key(ref)) as? UIImage
     }
 
+    // MARK: Kept files
+
+    /// The download behind an attachment, where the library keeps it.
+    func download(_ ref: String) -> ChatDownload? {
+        library.map { ChatDownload(boardKey: $0.key(ref), duration: nil) }
+    }
+
+    private func mediaSource(_ ref: String, size: Int?) async -> MediaSource? {
+        if let kept = sources[ref] { return kept }
+        guard let source, let made = try? await source(ref, size) else { return nil }
+        sources[ref] = made
+        return made
+    }
+
+    /// Puts where the attachment is on the board, read off the main thread.
+    func publish(_ ref: String, size: Int?) {
+        guard let library else { return }
+        Task {
+            guard let source = await mediaSource(ref, size: size) else { return }
+            await library.downloads.phase(ref, source: source)
+        }
+    }
+
+    /// A tap on its ring: pause what is going, else read it.
+    func toggle(_ ref: String, size: Int? = nil) {
+        guard let library else { return }
+        requested.insert(ref)
+        Task {
+            guard let source = await mediaSource(ref, size: size) else { return }
+            await library.downloads.toggle(ref, source: source)
+        }
+    }
+
     /// The picture, or nil when it couldn't be downloaded, decrypted or
-    /// read.
-    func image(_ ref: String) async -> UIImage? {
-        let load = self.load
+    /// read, or waits for a tap.
+    func image(_ ref: String, size: Int? = nil) async -> UIImage? {
+        let bytes: @Sendable () async -> Data?
+        if let library {
+            guard let source = await mediaSource(ref, size: size) else { return nil }
+            let allowed = requested.contains(ref) || rules.allows(.photos, size: size)
+            if !allowed, !(await library.downloads.phase(ref, source: source).isComplete) { return nil }
+            bytes = { try? await library.downloads.data(ref, source: source, priority: .user) }
+        } else if let load {
+            bytes = { try? await load(ref) }
+        } else {
+            return nil
+        }
         let picture = await pictures.picture(key(ref)) {
-            guard let data = try? await load(ref), let image = UIImage(data: data) else { return nil }
+            guard let data = await bytes(), let image = UIImage(data: data) else { return nil }
             let decoded = image.preparingThumbnail(of: FileViewLayout.decodedSize(image.size)) ?? image
             return (picture: decoded as AttachmentPictures.Picture, cost: ChatAttachmentImages.cost(decoded))
         }
@@ -157,19 +231,26 @@ final class ChatAttachmentImages: NSObject {
 /// One still in the outbox is this device's copy, dimmed under Telegram's
 /// ring, as the agent chat's sending picture is (`ChatMediaView`): the
 /// share of its bytes written fills the ring a frame at a time
-/// (`UploadRings`), and a failed one shows the ring's retry arrow.
-final class ChatAttachmentView: UIView, UploadRingTile {
+/// (`UploadRings`), and a failed one shows the ring's retry arrow. One
+/// sent but not on this phone shows the same ring for its download (the
+/// arrow, or how far it is) and its size in the corner.
+final class ChatAttachmentView: UIView, UploadRingTile, DownloadShowing {
     private let placeholder = UIImageView()
     private let picture = UIImageView()
     private let badge = UIView()
     private let badgeIcon = UIImageView()
     /// Still going to the server: the picture dimmed under its ring.
     private let dim = UIView()
-    private(set) var ring: UploadRingView?
+    /// The upload's or download's ring.
+    private(set) var ring: MediaRingView?
+    private(set) var sizeBadge: MediaBadgeView?
     private var attachment: ChatAttachment?
     private var task: Task<Void, Never>?
-    /// The board key this tile shows the ring of, if any.
+    /// The upload board key this tile shows the ring of, if any.
     private var following: String?
+    /// The download board key it follows, and where that download is.
+    private var boardKey: String?
+    private(set) var downloadPhase: DownloadPhase?
 
     /// The thumbhash under the picture, for tests.
     var placeholderImage: UIImage? { placeholder.image }
@@ -225,7 +306,17 @@ final class ChatAttachmentView: UIView, UploadRingTile {
         picture.alpha = 1
         badge.isHidden = true
         follow(attachment?.upload)
+        followDownload()
         loadIfNeeded()
+    }
+
+    private func makeRing() -> MediaRingView {
+        if let ring { return ring }
+        let ring = MediaRingView()
+        addSubview(ring)
+        self.ring = ring
+        setNeedsLayout()
+        return ring
     }
 
     // MARK: Uploading
@@ -235,8 +326,8 @@ final class ChatAttachmentView: UIView, UploadRingTile {
         if let following, following != upload?.key { UploadRings.shared.forget(self, key: following) }
         following = upload?.key
         guard let upload else {
-            ring?.isHidden = true
             dim.isHidden = true
+            if boardKey == nil { ring?.isHidden = true }
             return
         }
         UploadRings.shared.show(self, key: upload.key)
@@ -250,14 +341,8 @@ final class ChatAttachmentView: UIView, UploadRingTile {
     func setUpload(_ phase: UploadPhase?, animated: Bool) {
         guard let upload = attachment?.upload else { return }
         if animated { ringApplies += 1 }
-        let ring = self.ring ?? {
-            let ring = UploadRingView()
-            addSubview(ring)
-            self.ring = ring
-            setNeedsLayout()
-            return ring
-        }()
-        let state: UploadRingView.State
+        let ring = makeRing()
+        let state: MediaRingView.State
         if upload.failed { state = .failed }
         else {
             switch phase {
@@ -267,6 +352,7 @@ final class ChatAttachmentView: UIView, UploadRingTile {
             }
         }
         ring.set(state, animated: animated)
+        sizeBadge?.setLines([])
         if state != .done { dim.isHidden = false; dim.alpha = 1 }
         else if animated, !dim.isHidden {
             UIView.animate(withDuration: 0.25) { self.dim.alpha = 0 } completion: { _ in
@@ -277,8 +363,52 @@ final class ChatAttachmentView: UIView, UploadRingTile {
         }
     }
 
+    // MARK: Downloading
+
+    /// Follows the download behind a sent picture; one still in the
+    /// outbox is this device's own copy.
+    private func followDownload() {
+        let found = attachment.flatMap { attachment in attachment.local == nil ? source()?.download(attachment.ref) : nil }
+        if let boardKey, boardKey != found?.boardKey { DownloadRings.shared.forget(self, key: boardKey) }
+        boardKey = found?.boardKey
+        guard let found, let attachment else {
+            downloadPhase = nil
+            sizeBadge?.setLines([])
+            return
+        }
+        DownloadRings.shared.show(self, key: found.boardKey)
+        let phase = DownloadRings.shared.phase(found.boardKey)
+        if phase == nil { source()?.publish(attachment.ref, size: attachment.size) }
+        setDownload(phase, animated: false)
+    }
+
+    func setDownload(_ phase: DownloadPhase?, animated: Bool) {
+        guard attachment?.upload == nil else { return }
+        let was = downloadPhase
+        downloadPhase = phase
+        let state = boardKey == nil ? MediaRingView.State.done : MediaRingView.state(phase, video: false)
+        if state == .done { ring?.set(.done, animated: animated) } else { makeRing().set(state, animated: animated) }
+        let size = phase.flatMap { $0.isComplete ? nil : MediaSizeText.text($0) }
+        if size != nil, sizeBadge == nil {
+            let made = MediaBadgeView()
+            addSubview(made)
+            sizeBadge = made
+        }
+        sizeBadge?.setLines(size.map { [$0] } ?? [])
+        if phase.map({ !$0.isComplete }) == true { badge.isHidden = true }
+        setNeedsLayout()
+        // Here now: the picture it waited for.
+        if phase?.isComplete == true, was?.isComplete != true, picture.image == nil {
+            task?.cancel()
+            task = nil
+            badge.isHidden = true
+            loadIfNeeded()
+        }
+    }
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        if window != nil, boardKey == nil { followDownload() }
         loadIfNeeded()
     }
 
@@ -291,6 +421,9 @@ final class ChatAttachmentView: UIView, UploadRingTile {
         badgeIcon.frame = badge.bounds
         dim.frame = bounds
         ring?.frame = UploadRingLayout.disc(in: bounds.size)
+        if let sizeBadge, !sizeBadge.isHidden {
+            sizeBadge.apply(MediaStatusLayout.badge(in: bounds.size, lines: sizeBadge.lineSizes()))
+        }
     }
 
     private func loadIfNeeded() {
@@ -316,11 +449,13 @@ final class ChatAttachmentView: UIView, UploadRingTile {
             return
         }
         task = Task { @MainActor [weak self] in
-            let image = await images.image(attachment.ref)
+            let image = await images.image(attachment.ref, size: attachment.size)
             guard !Task.isCancelled, let self, self.attachment == attachment else { return }
+            self.task = nil
             guard let image else {
-                // `error && !uri`.
-                self.badge.isHidden = false
+                // Waiting for a tap, or saying how its download went: the
+                // ring does. Otherwise `error && !uri`.
+                if self.boardKey == nil || self.downloadPhase?.isComplete == true { self.badge.isHidden = false }
                 return
             }
             self.picture.image = image

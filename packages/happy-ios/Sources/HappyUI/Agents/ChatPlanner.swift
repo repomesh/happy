@@ -146,11 +146,19 @@ actor ChatPlanner {
             func media(_ media: Media, _ frame: CGRect) {
                 items.append(.media(ChatMedia(key: media.key, isVideo: media.isVideo, thumbhash: media.item.thumbhash, label: Strings.media(isVideo: media.isVideo, name: media.item.name)), frame: frame))
                 hits.insert(ChatHit(frame: frame, action: .openMedia(media.key)), at: 0)
+                // Telegram's ring pauses or resumes the download; a video's
+                // play button plays, so its badge does that instead.
+                let ring = media.isVideo ? MediaStatusLayout.badgeHit(in: frame) : ChatUpload.ring(in: frame).insetBy(dx: -8, dy: -8)
+                hits.insert(ChatHit(frame: ring, action: .toggleDownload(media.key)), at: 0)
             }
             func card(_ card: ChatMediaPlan.Card, _ frame: CGRect) {
                 let drawn = ChatMediaPlan.draw(card, in: frame, environment: environment)
                 items += drawn.items
                 hits.insert(drawn.hit, at: 0)
+                if let file = card.file {
+                    let chip = ResultCardLayout(frame: frame, opens: true).chip
+                    hits.insert(ChatHit(frame: chip.insetBy(dx: -8, dy: -8), action: .toggleDownload(file.key)), at: 0)
+                }
             }
             for (placed, draft) in zip(layout.parts, drafts) {
                 switch (placed, draft) {

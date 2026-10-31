@@ -449,7 +449,10 @@ final class SettingsViewController: UIViewController, UIScrollViewDelegate, UISe
             return [
                 accountRows(),
                 [Row(Index.profile, image: profilePhoto, value: profileName.isEmpty ? nil : profileName, action: { [weak self] in self?.openProfile() })],
-                [Row(Index.appearance, action: { [weak self] in self?.open(.appearance) })],
+                [
+                    Row(Index.appearance, action: { [weak self] in self?.open(.appearance) }),
+                    Row(Index.dataStorage, action: { [weak self] in self?.open(.dataStorage) }),
+                ],
                 [Row(Index.supportUs, action: { [weak self] in self?.open(.supportUs) })],
                 aboutRows(),
                 [Row(id: "disconnect", title: Strings.disconnect, accessory: .none, destructive: true, action: { [weak self] in self?.remove(id, direct: true) })],
@@ -466,6 +469,7 @@ final class SettingsViewController: UIViewController, UIScrollViewDelegate, UISe
                 Row(Index.language, action: { [weak self] in self?.open(.language) }),
                 Row(Index.voice, action: { [weak self] in self?.open(.voice) }),
                 Row(Index.agents, action: { [weak self] in self?.push(.settingsAgents, for: id) }),
+                Row(Index.dataStorage, action: { [weak self] in self?.open(.dataStorage) }),
             ],
             [
                 Row(Index.scanTerminal, accessory: .none, action: { [weak self] in self?.connectTerminal(scanning: true) }),
@@ -479,7 +483,7 @@ final class SettingsViewController: UIViewController, UIScrollViewDelegate, UISe
 
     /// The pages a row opens in settings' cards.
     enum Page: CaseIterable {
-        case appearance, supportUs, account, backup, voice, language
+        case appearance, supportUs, account, backup, voice, language, dataStorage
     }
 
     /// Whether `profile`'s page has `page`: a computer's look, or a Happy
@@ -488,6 +492,7 @@ final class SettingsViewController: UIViewController, UIScrollViewDelegate, UISe
         switch page {
         case .appearance: profile.isAgentConnection
         case .supportUs: true
+        case .dataStorage: profile.isAgentConnection || activeSession != nil
         case .account, .backup, .voice, .language: !profile.isAgentConnection && activeSession != nil
         }
     }
@@ -500,6 +505,9 @@ final class SettingsViewController: UIViewController, UIScrollViewDelegate, UISe
         case .backup: activeSession.map { BackupSettingsViewController(context: context, session: $0) }
         case .voice: activeSession.map { VoiceSettingsViewController(context: context, session: $0) }
         case .language: activeSession.map { SettingsLanguageViewController(session: $0) }
+        case .dataStorage:
+            // The shown profile's media: a computer's library, or the active account's.
+            DataStorageViewController(library: shown.flatMap { $0.isAgentConnection ? MediaLibrary.agent($0.id) : nil } ?? activeSession?.media)
         }
     }
 

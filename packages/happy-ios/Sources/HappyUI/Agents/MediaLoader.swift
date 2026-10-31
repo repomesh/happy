@@ -7,41 +7,57 @@ import UniformTypeIdentifiers
 
 /// One conversation's pictures and recordings over the paired computer: a
 /// tool call's from `GET /v0/agents/:id/tool-calls/:tcid/media/:index`, a
-/// photo the person sent from the bytes they sent. Decoded off the main
-/// thread at no more than they are drawn, and kept while memory allows.
-/// A recording streams through `MediaStream`, a range at a time.
+/// photo the person sent from the bytes they sent. A tool's file is read
+/// into the computer's `MediaLibrary` once and kept there for good; a
+/// photo or small file reads itself as it shows up in the conversation
+/// (`MediaAutoDownload`), anything else waits for a tap on its ring.
+/// Decoded off the main thread at no more than they are drawn, and kept
+/// while memory allows. A recording streams through `MediaStream`, from
+/// what is here and a range at a time from the computer.
 @MainActor
 final class MediaLoader: NSObject, ChatMediaSource {
     private let client: AgentClient
     /// New work's is the daemon's ID once it has made it.
     var agentId: String
+    /// Where its files are kept; nil only where the system gives no folder.
+    let library: MediaLibrary?
     private var tools: [String: Media] = [:]
     private var sent: [String: Data] = [:]
     /// Files still on their way, read from their copy on this phone.
     private var local: [String: ChatItem.SentFile] = [:]
     private var streams: [String: MediaStream] = [:]
+    private var durations: [String: Double] = [:]
+    /// Files a person asked for, read whatever the automatic rules say.
+    private var requested: Set<String> = []
+    /// Files already handed to automatic download.
+    private var automatic: Set<String> = []
+    private var rules = MediaAutoDownload.load()
     /// Each key's largest decode, so eviction drops the size with the picture.
     private let images = NSCache<NSString, Decoded>()
-    /// A tool's bytes, so a larger decode doesn't fetch them again.
-    private let bytes = NSCache<NSString, NSData>()
     #if DEBUG
     /// UI tests: every picture fails until the first retry, as a dropped
     /// connection would make it (`V2_MEDIA_FAIL_UNTIL_RETRY`).
     private var failsUntilRetry = ProcessInfo.processInfo.environment["HAPPY_MEDIA_FAIL_UNTIL_RETRY"] == "1"
     #endif
 
-    init(client: AgentClient, agentId: String) {
+    init(client: AgentClient, agentId: String, library: MediaLibrary?) {
         self.client = client
         self.agentId = agentId
+        self.library = library
         images.totalCostLimit = 48 * 1024 * 1024
-        bytes.totalCostLimit = 32 * 1024 * 1024
         super.init()
         NotificationCenter.default.addObserver(self, selector: #selector(memoryWarning), name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(rulesChanged), name: MediaAutoDownload.didChange, object: nil)
     }
 
     @objc private func memoryWarning() {
         images.removeAllObjects()
-        bytes.removeAllObjects()
+    }
+
+    @objc private func rulesChanged() {
+        rules = MediaAutoDownload.load()
+        automatic = []
+        startAutomatic()
     }
 
     private final class Decoded {
@@ -66,11 +82,72 @@ final class MediaLoader: NSObject, ChatMediaSource {
                 }
             }
         }
+        startAutomatic()
     }
 
     nonisolated static func sentKey(_ id: String) -> String { "sent/\(id)" }
 
     func media(_ key: String) -> Media? { tools[key] }
+
+    // MARK: Kept files
+
+    /// The file's ID in the library: a tool call's media is never another's.
+    func resourceID(_ media: Media) -> String { "tool/\(agentId)/\(media.toolCallId)/\(media.index)" }
+
+    /// Where its bytes come from: the computer's media route, a range at a time.
+    func source(_ media: Media) -> MediaSource {
+        let client = client
+        let agentId = agentId
+        let (toolCallId, index) = (media.toolCallId, media.index)
+        return MediaSource(length: media.item.size.map { Int($0) }) { range in
+            do {
+                let response = try await client.media(agentId, toolCallId: toolCallId, index: index, range: range.lowerBound...(range.upperBound - 1))
+                return try MediaPiece.http(status: response.status, headers: response.headers, body: response.body)
+            } catch AgentClientError.status(let status, _, _) where (400..<500).contains(status) && status != 408 && status != 429 {
+                throw MediaError.status(status)
+            }
+        }
+    }
+
+    private nonisolated static func kind(_ media: Media) -> MediaAutoDownload.Kind {
+        media.isVideo ? .videos : media.isVisual ? .photos : .files
+    }
+
+    /// What reads itself as it shows up, at low priority, a few at a time.
+    private func startAutomatic() {
+        guard let library else { return }
+        for media in tools.values where !automatic.contains(media.key) {
+            automatic.insert(media.key)
+            guard rules.allows(Self.kind(media), size: media.item.size.map { Int($0) }) else { continue }
+            let (id, source) = (resourceID(media), source(media))
+            Task { await library.downloads.download(id, source: source, priority: .background) }
+        }
+    }
+
+    func download(_ key: String) -> ChatDownload? {
+        guard let library, let media = tools[key] else { return nil }
+        return ChatDownload(boardKey: library.key(resourceID(media)), duration: durations[key])
+    }
+
+    func publishDownload(_ key: String) {
+        guard let library, let media = tools[key] else { return }
+        let (id, source) = (resourceID(media), source(media))
+        Task { await library.downloads.phase(id, source: source) }
+    }
+
+    /// A tap on a file's ring: pause what is going, else read it.
+    func toggleDownload(_ key: String) {
+        guard let library, let media = tools[key] else { return }
+        requested.insert(key)
+        let (id, source) = (resourceID(media), source(media))
+        Task { await library.downloads.toggle(id, source: source) }
+    }
+
+    /// Whether the whole file is here, from the board's last word.
+    func isDownloaded(_ key: String) -> Bool {
+        guard let found = download(key) else { return true }
+        return DownloadRings.shared.phase(found.boardKey)?.isComplete == true
+    }
 
     // MARK: ChatMediaSource
 
@@ -98,19 +175,23 @@ final class MediaLoader: NSObject, ChatMediaSource {
         return image
     }
 
+    /// A tool's picture from the library: read first where the rules or a
+    /// tap allow; nil, with its ring showing the arrow, where neither does.
     private func picture(_ media: Media, pixels: Int) async -> UIImage? {
         #if DEBUG
         if failsUntilRetry { return nil }
         #endif
-        let key = media.key as NSString
-        let data: Data
-        if let kept = bytes.object(forKey: key) {
-            data = kept as Data
-        } else {
+        let id = resourceID(media)
+        let source = source(media)
+        guard let library else {
             guard let response = try? await client.media(agentId, toolCallId: media.toolCallId, index: media.index) else { return nil }
-            data = response.body
-            bytes.setObject(data as NSData, forKey: key, cost: data.count)
+            return await Task.detached(priority: .userInitiated) { Images.decode(response.body, maxPixels: pixels) }.value
         }
+        let allowed = requested.contains(media.key) || rules.allows(.photos, size: media.item.size.map { Int($0) })
+        if !allowed {
+            guard await library.downloads.phase(id, source: source).isComplete else { return nil }
+        }
+        guard let data = try? await library.downloads.data(id, source: source, priority: .user) else { return nil }
         return await Task.detached(priority: .userInitiated) { Images.decode(data, maxPixels: pixels) }.value
     }
 
@@ -129,9 +210,17 @@ final class MediaLoader: NSObject, ChatMediaSource {
         }.value
     }
 
-    /// A recording's first frame, read through its stream.
+    /// A recording's first frame and length, read through its stream: the
+    /// few ranges they take, kept for when it plays.
     private func poster(_ media: Media, pixels: Int) async -> UIImage? {
-        let generator = AVAssetImageGenerator(asset: stream(media).asset())
+        guard let library else { return nil }
+        let asset = stream(media, library: library).asset()
+        await library.downloads.phase(resourceID(media), source: source(media))
+        if durations[media.key] == nil,
+           let duration = (try? await asset.load(.duration)).map(CMTimeGetSeconds), duration.isFinite, duration > 0 {
+            durations[media.key] = duration
+        }
+        let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: pixels, height: pixels)
         guard let frame = try? await generator.image(at: .zero) else { return nil }
@@ -149,26 +238,28 @@ final class MediaLoader: NSObject, ChatMediaSource {
 
     nonisolated static let retry = Notification.Name("V2MediaLoader.retry")
 
-    /// A document's or file's bytes, as presented, written to `url` a range
-    /// at a time off the main thread. False when they could not be read.
+    /// A document's or file's bytes, as presented, at `url`: read into the
+    /// library first where they aren't there yet (its card's ring shows
+    /// how far), then linked to `url`. False when they could not be read.
     func download(_ media: Media, to url: URL) async -> Bool {
-        let kept = bytes.object(forKey: media.key as NSString).map { $0 as Data }
-        let client = client
-        let agentId = agentId
+        requested.insert(media.key)
+        let id = resourceID(media)
+        let source = source(media)
+        guard let library else { return false }
+        do {
+            try await library.downloads.complete(id, source: source, priority: .user)
+        } catch {
+            return false
+        }
+        let complete = library.store.completeURL(id)
         return await Task.detached(priority: .userInitiated) { () -> Bool in
             let manager = FileManager.default
             do {
                 try manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                if let kept { try kept.write(to: url, options: .atomic); return true }
-                guard manager.createFile(atPath: url.path, contents: nil) else { return false }
-                let handle = try FileHandle(forWritingTo: url)
-                defer { try? handle.close() }
-                try await AgentClient.read({ range in
-                    try await client.media(agentId, toolCallId: media.toolCallId, index: media.index, range: range)
-                }, each: { piece, _, _ in try handle.write(contentsOf: piece) })
+                try? manager.removeItem(at: url)
+                do { try manager.linkItem(at: complete, to: url) } catch { try manager.copyItem(at: complete, to: url) }
                 return true
             } catch {
-                try? manager.removeItem(at: url)
                 return false
             }
         }.value
@@ -176,62 +267,64 @@ final class MediaLoader: NSObject, ChatMediaSource {
 
     // MARK: Playback
 
-    /// A player for a recording, streamed from the computer as it plays.
+    /// A player for a recording, streaming from what is here and from the
+    /// computer as it plays; the rest of the file reads on behind it, so
+    /// it is kept once played.
     func player(_ key: String) -> AVPlayer? {
         if let file = local[key], file.isVideo { return AVPlayer(url: file.file) }
-        guard let media = tools[key], media.isVideo else { return nil }
-        return AVPlayer(playerItem: AVPlayerItem(asset: stream(media).asset()))
+        guard let media = tools[key], media.isVideo, let library else { return nil }
+        requested.insert(key)
+        let (id, source) = (resourceID(media), source(media))
+        Task { await library.downloads.download(id, source: source, priority: .user) }
+        return AVPlayer(playerItem: AVPlayerItem(asset: stream(media, library: library).asset()))
     }
 
-    private func stream(_ media: Media) -> MediaStream {
+    private func stream(_ media: Media, library: MediaLibrary) -> MediaStream {
         if let stream = streams[media.key] { return stream }
-        let stream = MediaStream(client: client, agentId: agentId, media: media)
+        let stream = MediaStream(downloads: library.downloads, id: resourceID(media), source: source(media), name: media.item.name, mimeType: media.item.mimeType)
         streams[media.key] = stream
         return stream
     }
 }
 
 /// A recording's bytes for AVFoundation, which can't send the computer's
-/// token itself: a private URL scheme whose every request is answered here
-/// with `Range` requests over the paired connection, by `fetch`: a tool
-/// call's media, or an artifact's file.
+/// token or read a file still arriving itself: a private URL scheme whose
+/// every request is answered here from `MediaDownloads`, which serves what
+/// is on this phone at once and fetches the rest a range at a time, the
+/// range a player asks for first. So a recording plays from what is here
+/// while the rest arrives, and a seek waits only for its own range. A
+/// legacy file is decrypted on the way (`MediaSeal`).
 final class MediaStream: NSObject, AVAssetResourceLoaderDelegate, @unchecked Sendable {
-    static let scheme = "happy-v2-media"
-    /// Asked for at a time; a player asks for more as it plays.
-    static let chunk = 512 * 1024
+    static let scheme = "happy-media"
+    /// Answered at a time while the bytes are here; a player asks for more as it plays.
+    static let piece = 512 * 1024
     #if DEBUG
     /// Each range read, for checking that a recording streams.
     private static let log = Logger(subsystem: "engineering.happy", category: "media")
     #endif
 
-    typealias Fetch = @Sendable (ClosedRange<Int>) async throws -> HTTP1Response
-    private let fetch: Fetch
+    private let downloads: MediaDownloads
+    private let id: String
+    private let source: MediaSource
     private let name: String
     private let mimeType: String
-    private let queue = DispatchQueue(label: "engineering.happy.v2-media")
+    private let queue = DispatchQueue(label: "engineering.happy.media-stream")
     /// Touched only on `queue`.
     private var serving: [ObjectIdentifier: Task<Void, Never>] = [:]
-    private var total: Int?
     /// Every range answered, for tests (on `queue`).
-    private(set) var ranges: [ClosedRange<Int>] = []
+    private(set) var ranges: [Range<Int>] = []
 
-    /// `name` is the file's, for its extension; `size` its length, if known.
-    init(name: String, mimeType: String, size: Int?, fetch: @escaping Fetch) {
-        self.fetch = fetch
+    /// `name` is the file's, for its extension.
+    init(downloads: MediaDownloads, id: String, source: MediaSource, name: String, mimeType: String) {
+        self.downloads = downloads
+        self.id = id
+        self.source = source
         self.name = name
         self.mimeType = mimeType
-        total = size
     }
 
-    convenience init(client: AgentClient, agentId: String, media: Media) {
-        let (toolCallId, index) = (media.toolCallId, media.index)
-        self.init(name: media.item.name, mimeType: media.item.mimeType, size: media.item.size.map { Int($0) }) { range in
-            try await client.media(agentId, toolCallId: toolCallId, index: index, range: range)
-        }
-    }
-
-    /// The ranges read so far.
-    func answered() async -> [ClosedRange<Int>] { await onQueue { self.ranges } }
+    /// The ranges answered so far.
+    func answered() async -> [Range<Int>] { await onQueue { self.ranges } }
 
     func asset() -> AVURLAsset {
         // Letters and digits only, so the URL always parses.
@@ -262,11 +355,11 @@ final class MediaStream: NSObject, AVAssetResourceLoaderDelegate, @unchecked Sen
         init(_ request: AVAssetResourceLoadingRequest) { self.request = request }
     }
 
-    /// Fetches off `queue`; reads and answers the request only on it, where
+    /// Reads off `queue`; touches the request only on it, where
     /// AVFoundation cancels it.
     private func serve(_ box: Request) async {
         do {
-            let total = try await size()
+            let total = try await downloads.length(id, source: source)
             let type = UTType(mimeType: mimeType)?.identifier ?? UTType.mpeg4Movie.identifier
             let span = await onQueue { () -> Range<Int>? in
                 let request = box.request
@@ -279,22 +372,23 @@ final class MediaStream: NSObject, AVAssetResourceLoaderDelegate, @unchecked Sen
                 guard let data = request.dataRequest else { return 0..<0 }
                 let start = Int(data.currentOffset != 0 ? data.currentOffset : data.requestedOffset)
                 let end = data.requestsAllDataToEndOfResource ? total : min(total, Int(data.requestedOffset) + data.requestedLength)
-                return start..<max(start, end)
+                return min(start, total)..<max(min(start, total), end)
             }
             guard let span else { return }
             var offset = span.lowerBound
             while offset < span.upperBound {
                 try Task.checkCancellation()
-                let range = offset...(min(span.upperBound, offset + Self.chunk) - 1)
-                let response = try await fetch(range)
+                // What is here goes at once, in big pieces; what isn't, a
+                // range at a time as it comes.
+                let here = await downloads.available(id, source: source, from: offset, limit: min(Self.piece, span.upperBound - offset))
+                let length = here > 0 ? here : min(MediaDownloads.streamChunk, span.upperBound - offset)
+                let range = offset..<(offset + length)
+                let piece = try await downloads.read(id, source: source, range: range)
                 await onQueue { self.ranges.append(range) }
                 #if DEBUG
-                Self.log.notice("range \(offset)-\(min(span.upperBound, offset + Self.chunk) - 1) of \(total): \(response.status), \(response.body.count) bytes")
+                Self.log.notice("range \(range.lowerBound)-\(range.upperBound) of \(total), \(here > 0 ? "kept" : "fetched")")
                 #endif
-                // A whole file answered to a range starts at zero.
-                let body = response.status == 200 ? response.body.dropFirst(offset) : response.body
-                guard !body.isEmpty else { throw URLError(.networkConnectionLost) }
-                let piece = Data(body.prefix(span.upperBound - offset))
+                guard !piece.isEmpty else { throw URLError(.networkConnectionLost) }
                 let going = await onQueue { () -> Bool in
                     guard !box.request.isCancelled else { return false }
                     box.request.dataRequest?.respond(with: piece)
@@ -308,19 +402,6 @@ final class MediaStream: NSObject, AVAssetResourceLoaderDelegate, @unchecked Sen
         } catch {
             await onQueue { if !box.request.isCancelled { box.request.finishLoading(with: error) } }
         }
-    }
-
-    /// The recording's length: as presented, else from a first range's
-    /// `Content-Range`, else a whole file's length.
-    private func size() async throws -> Int {
-        if let total = await onQueue({ self.total }) { return total }
-        let response = try await fetch(0...1)
-        let range = response.headers.first { $0.key.lowercased() == "content-range" }?.value
-        guard let size = range.flatMap({ $0.split(separator: "/").last.flatMap { Int($0) } }) ?? (response.status == 200 ? response.body.count : nil) else {
-            throw URLError(.cannotParseResponse)
-        }
-        await onQueue { self.total = size }
-        return size
     }
 
     private func onQueue<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {

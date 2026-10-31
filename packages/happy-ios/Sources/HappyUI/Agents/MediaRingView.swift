@@ -4,44 +4,71 @@ import HappyIcons
 import HappyLayout
 import UIKit
 
-/// Telegram's radial status over a sending photo (`RadialStatusNode`,
-/// `RadialProgressContentNode`): a dark disc, the share of bytes sent as
-/// a white arc that turns while it fills, a cross to take the picture out.
-/// Waiting its turn, a short arc turns; failed, a retry arrow.
-final class UploadRingView: UIView {
+/// Telegram's radial status over chat media (`RadialStatusNode`,
+/// `RadialProgressContentNode`), one component for a file on its way out
+/// and on its way in: a dark disc, the share of bytes moved as a white
+/// arc that turns while it fills, a cross to stop it. Waiting its turn, a
+/// short arc turns; failed, a retry arrow. A file not here yet shows the
+/// download arrow; a video, the play glyph, with the arc round it while
+/// it downloads.
+final class MediaRingView: UIView {
     enum State: Equatable {
         case waiting
         case progress(Double)
         case failed
         case done
+        /// Not on this phone: a tap reads it.
+        case download
+        /// A video, ready to play from what is here and what streams in.
+        case play
+        /// A video while it downloads: the play glyph inside the arc (nil:
+        /// its size isn't known yet, so the short arc turns).
+        case playing(Double?)
+    }
+
+    /// The disc and what is drawn on it.
+    struct Colors: Equatable {
+        var disc: ColorToken
+        var ink: ColorToken
+        static let overMedia = Colors(disc: Palette.uploadDisc, ink: Palette.uploadInk)
+        static let onCard = Colors(disc: Palette.fileRingDisc, ink: Palette.fileRingInk)
     }
 
     private let disc = UIView()
     private let arc = CAShapeLayer()
     private let cross = CAShapeLayer()
+    private let arrow = CAShapeLayer()
     private let retry = UIImageView()
+    private let play = UIImageView()
     private(set) var state: State = .waiting
     /// The share the arc is drawn to now (or heading to).
     private(set) var shown: Double = 0
     /// How far round the arc is drawn, for tests.
     var drawn: CGFloat { arc.strokeEnd }
+    var colors = Colors.overMedia {
+        didSet { if colors != oldValue { updateColors() } }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
         disc.isUserInteractionEnabled = false
         addSubview(disc)
-        for shape in [arc, cross] {
+        for shape in [arc, cross, arrow] {
             shape.fillColor = nil
             shape.lineCap = .round
+            shape.lineJoin = .round
             disc.layer.addSublayer(shape)
         }
         arc.strokeStart = 0
         // It starts out waiting, so the short arc, not a whole ring.
         arc.strokeEnd = UploadRingLayout.waitingShare
-        retry.contentMode = .center
-        retry.isHidden = true
-        disc.addSubview(retry)
+        arrow.isHidden = true
+        for glyph in [retry, play] {
+            glyph.contentMode = .center
+            glyph.isHidden = true
+            disc.addSubview(glyph)
+        }
         updateColors()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in self.updateColors() }
     }
@@ -52,11 +79,13 @@ final class UploadRingView: UIView {
     }
 
     private func updateColors() {
-        disc.backgroundColor = UIColor(Palette.uploadDisc)
-        let ink = UIColor(Palette.uploadInk).resolvedColor(with: traitCollection).cgColor
+        disc.backgroundColor = UIColor(colors.disc)
+        let ink = UIColor(colors.ink).resolvedColor(with: traitCollection).cgColor
         arc.strokeColor = ink
         cross.strokeColor = ink
-        retry.tintColor = UIColor(Palette.uploadInk)
+        arrow.strokeColor = ink
+        retry.tintColor = UIColor(colors.ink)
+        play.tintColor = UIColor(colors.ink)
     }
 
     override func layoutSubviews() {
@@ -81,8 +110,21 @@ final class UploadRingView: UIView {
         path.move(to: CGPoint(x: center.x + arm, y: center.y - arm))
         path.addLine(to: CGPoint(x: center.x - arm, y: center.y + arm))
         cross.path = path.cgPath
+        arrow.frame = disc.bounds
+        arrow.lineWidth = cross.lineWidth
+        let points = MediaStatusLayout.arrow(side: side)
+        let arrowPath = UIBezierPath()
+        arrowPath.move(to: points.shaft[0])
+        arrowPath.addLine(to: points.shaft[1])
+        arrowPath.move(to: points.head[0])
+        arrowPath.addLine(to: points.head[1])
+        arrowPath.addLine(to: points.head[2])
+        arrow.path = arrowPath.cgPath
         retry.frame = disc.bounds
         retry.image = .icon(.ionicons("refresh"), size: (side * 0.48).rounded())
+        // The play glyph's triangle sits a little right of the middle, as it looks centred.
+        play.frame = disc.bounds.offsetBy(dx: (side * 0.04).rounded(), dy: 0)
+        play.image = .icon(.ionicons("play"), size: MediaStatusLayout.playGlyph(side: side))
         CATransaction.commit()
     }
 
@@ -97,20 +139,33 @@ final class UploadRingView: UIView {
         guard state != self.state else { return }
         let was = self.state
         self.state = state
+        let wasProgress: Bool = switch was {
+        case .progress, .playing(.some): true
+        default: false
+        }
         switch state {
         case .waiting:
-            show()
-            arc.isHidden = false; cross.isHidden = false; retry.isHidden = true
+            show(glyph: cross, arc: true)
             stroke(to: UploadRingLayout.waitingShare, animated: false)
         case .progress(let share):
-            show()
-            arc.isHidden = false; cross.isHidden = false; retry.isHidden = true
+            show(glyph: cross, arc: true)
             // From waiting's short arc, the real share starts from nothing.
-            if was == .waiting || was == .failed || was == .done { stroke(to: 0, animated: false) }
-            stroke(to: share, animated: animated)
+            if !wasProgress { stroke(to: 0, animated: false) }
+            stroke(to: share, animated: animated && wasProgress)
+        case .playing(let share):
+            show(glyph: play, arc: true)
+            if let share {
+                if !wasProgress { stroke(to: 0, animated: false) }
+                stroke(to: share, animated: animated && wasProgress)
+            } else {
+                stroke(to: UploadRingLayout.waitingShare, animated: false)
+            }
         case .failed:
-            show()
-            arc.isHidden = true; cross.isHidden = true; retry.isHidden = false
+            show(glyph: retry, arc: false)
+        case .download:
+            show(glyph: arrow, arc: false)
+        case .play:
+            show(glyph: play, arc: false)
         case .done:
             stroke(to: 1, animated: animated)
             guard animated else { isHidden = true; return }
@@ -126,12 +181,18 @@ final class UploadRingView: UIView {
         turn()
     }
 
-    private func show() {
+    /// Which glyph shows, and whether the arc does.
+    private func show(glyph: AnyObject, arc showsArc: Bool) {
         layer.removeAllAnimations()
         disc.layer.removeAllAnimations()
         isHidden = false
         alpha = 1
         disc.transform = .identity
+        arc.isHidden = !showsArc
+        cross.isHidden = glyph !== cross
+        arrow.isHidden = glyph !== arrow
+        retry.isHidden = glyph !== retry
+        play.isHidden = glyph !== play
     }
 
     private func stroke(to share: Double, animated: Bool) {
@@ -154,7 +215,10 @@ final class UploadRingView: UIView {
 
     /// Turns once every 1.5 s while it has something to show, as Telegram's does.
     private func turn() {
-        let turning = window != nil && (state == .waiting || { if case .progress = state { true } else { false } }())
+        let turning: Bool = switch state {
+        case .waiting, .progress, .playing: window != nil
+        default: false
+        }
         if !turning {
             arc.removeAnimation(forKey: "turn")
         } else if arc.animation(forKey: "turn") == nil {
@@ -166,6 +230,22 @@ final class UploadRingView: UIView {
             spin.isRemovedOnCompletion = false
             spin.timingFunction = CAMediaTimingFunction(name: .linear)
             arc.add(spin, forKey: "turn")
+        }
+    }
+
+    /// The ring for a download in `phase`: a picture's or file's, or a
+    /// video's play button.
+    static func state(_ phase: DownloadPhase?, video: Bool) -> State {
+        if video {
+            guard case .downloading = phase else { return .play }
+            return .playing(phase?.share)
+        }
+        switch phase {
+        case nil: return .done
+        case .remote, .paused: return .download
+        case .downloading: return phase?.share.map { .progress($0) } ?? .waiting
+        case .failed: return .failed
+        case .complete: return .done
         }
     }
 }
@@ -239,6 +319,71 @@ final class UploadRings {
             if live.isEmpty { tiles[key] = nil }
             for tile in live {
                 tile.setUpload(phase, animated: true)
+                applied += 1
+            }
+        }
+    }
+}
+
+/// A view that shows one download's ring or size.
+@MainActor
+protocol DownloadShowing: AnyObject {
+    func setDownload(_ phase: DownloadPhase?, animated: Bool)
+}
+
+/// The views showing each download, by its board key, and the one drain
+/// of `DownloadBoard` a frame that moves them, as `UploadRings` does for
+/// uploads. Several views may show one download (a tile and the viewer).
+@MainActor
+final class DownloadRings {
+    static let shared = DownloadRings(board: .shared)
+
+    private let board: DownloadBoard
+    private var views: [String: NSHashTable<AnyObject>] = [:]
+    private var link: CADisplayLink?
+    private var token: UUID?
+    /// Applies a frame has made, for tests.
+    private(set) var applied = 0
+
+    init(board: DownloadBoard) {
+        self.board = board
+        token = board.observe { [weak self] in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.wake() } }
+        }
+        wake()
+    }
+
+    func phase(_ key: String) -> DownloadPhase? { board.phase(key) }
+
+    func show(_ view: DownloadShowing, key: String) {
+        let table = views[key] ?? NSHashTable<AnyObject>.weakObjects()
+        table.add(view)
+        views[key] = table
+    }
+
+    func forget(_ view: DownloadShowing, key: String) {
+        views[key]?.remove(view)
+        if views[key]?.allObjects.isEmpty == true { views[key] = nil }
+    }
+
+    private func wake() {
+        if link == nil {
+            let link = CADisplayLink(target: self, selector: #selector(frame))
+            link.add(to: .main, forMode: .common)
+            self.link = link
+        }
+        link?.isPaused = false
+    }
+
+    @objc private func frame() {
+        link?.isPaused = true
+        drain()
+    }
+
+    func drain() {
+        for (key, phase) in board.drain() {
+            for case let view as DownloadShowing in views[key]?.allObjects ?? [] {
+                view.setDownload(phase, animated: true)
                 applied += 1
             }
         }

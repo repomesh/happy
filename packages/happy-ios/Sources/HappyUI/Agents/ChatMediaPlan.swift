@@ -100,13 +100,15 @@ enum ChatMediaPlan {
         var title: String
         var detail: String
         var action: ChatRowAction
+        /// A file's: its chip and detail follow its download.
+        var file: Media? = nil
     }
 
     static func card(file media: Media) -> Card {
         Card(
             glyph: .ionicons("document-outline"), title: media.item.name,
             detail: Strings.fileDetail(kind: media.item.kind, mimeType: media.item.mimeType, size: media.item.size),
-            action: .openMedia(media.key)
+            action: .openMedia(media.key), file: media
         )
     }
 
@@ -153,10 +155,22 @@ enum ChatMediaPlan {
         var items: [ChatDrawItem] = [
             .box(ChatBox(frame: frame, fill: Palette.cardFill, border: Palette.divider, borderWidth: 1, radius: C.radius)),
             .box(ChatBox(frame: layout.chip, fill: Palette.cardChip, radius: C.chipRadius)),
-            .icon(card.glyph, size: C.glyph, frame: layout.glyph, tint: Palette.cardDetail),
             line(card.title, weight: .semiBold, size: 14, color: Palette.cardTitle, frame: layout.title),
-            line(card.detail, weight: .medium, size: 12, color: Palette.cardDetail, frame: layout.detail),
         ]
+        if let file = card.file {
+            // Telegram's file bubble: the ring on the chip while the file
+            // isn't here, and how much of it is beside the kind.
+            let local = { (rect: CGRect) in rect.offsetBy(dx: -frame.minX, dy: -frame.minY) }
+            items.append(.fileStatus(ChatFileStatus(
+                key: file.key, glyph: card.glyph, glyphSize: C.glyph,
+                kind: Strings.fileKind(kind: file.item.kind, mimeType: file.item.mimeType),
+                size: file.item.size.map { Int($0) }, chip: local(layout.chip), detail: local(layout.detail),
+                fontScale: min(scale, 1.2)
+            ), frame: frame))
+        } else {
+            items.append(.icon(card.glyph, size: C.glyph, frame: layout.glyph, tint: Palette.cardDetail))
+            items.append(line(card.detail, weight: .medium, size: 12, color: Palette.cardDetail, frame: layout.detail))
+        }
         if let chevron = layout.chevron {
             items.append(.icon(.ionicons("chevron-forward"), size: 16, frame: chevron, tint: Palette.cardDetail))
         }

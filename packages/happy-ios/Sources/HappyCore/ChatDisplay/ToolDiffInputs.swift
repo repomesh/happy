@@ -111,11 +111,14 @@ public struct ToolFileInput: Equatable, Sendable {
     public var imageHeight: Double?
     /// Shown until the picture itself arrives.
     public var thumbhash: String?
+    /// The plaintext's bytes, when the sender said.
+    public var size: Double?
 
     public init?(_ input: JSONValue) {
         guard let ref = input["ref"]?.stringValue, let name = input["name"]?.stringValue else { return nil }
         switch input["size"] {
-        case nil, .number?: break
+        case nil: break
+        case .number(let bytes)?: size = bytes
         default: return nil
         }
         var width: Double?

@@ -20,10 +20,13 @@ public struct HTTPRequest: Sendable, Equatable {
 public struct HTTPResponse: Sendable {
     public var status: Int
     public var body: Data
+    /// As the server sent them; read case-insensitively.
+    public var headers: [String: String]
 
-    public init(status: Int, body: Data) {
+    public init(status: Int, body: Data, headers: [String: String] = [:]) {
         self.status = status
         self.body = body
+        self.headers = headers
     }
 }
 
@@ -110,7 +113,11 @@ public final class URLSessionTransport: HTTPTransport, @unchecked Sendable {
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
-        return HTTPResponse(status: http.statusCode, body: data)
+        var headers: [String: String] = [:]
+        for (name, value) in http.allHeaderFields {
+            if let name = name as? String, let value = value as? String { headers[name] = value }
+        }
+        return HTTPResponse(status: http.statusCode, body: data, headers: headers)
     }
 
     public func sendImage(_ request: HTTPRequest, limit: Int) async throws -> HTTPResponse {

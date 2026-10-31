@@ -24,6 +24,8 @@ final class ArtifactMedia: NSObject, ChatMediaSource, ChatMediaPlaying, ChatMedi
     let artifactId: String
     let version: Int
     private let client: AgentClient
+    /// Where the version's files are kept, read once.
+    private let library: MediaLibrary?
     private let fetcher: BrowserFetcher
     private var items: [String: Item] = [:]
     private var reading: [String: Task<Data?, Never>] = [:]
@@ -37,8 +39,9 @@ final class ArtifactMedia: NSObject, ChatMediaSource, ChatMediaPlaying, ChatMedi
 
     /// `workspace` names the workspace whose network reaches linked
     /// pictures (the artifact's source's, as the browser picks it).
-    init(client: AgentClient, artifactId: String, version: Int, workspace: (@Sendable () async throws -> String)? = nil) {
+    init(client: AgentClient, artifactId: String, version: Int, library: MediaLibrary? = nil, workspace: (@Sendable () async throws -> String)? = nil) {
         self.client = client
+        self.library = library
         self.artifactId = artifactId
         self.version = version
         fetcher = BrowserFetcher(client: client, workspace: workspace ?? { [client] in try await client.browserWorkspace(artifactID: artifactId) })
@@ -108,6 +111,15 @@ final class ArtifactMedia: NSObject, ChatMediaSource, ChatMediaPlaying, ChatMedi
         let client = client
         let fetcher = fetcher
         let (artifactId, version) = (artifactId, version)
+        if case .file(let file) = item, let library {
+            let (id, source) = (resourceID(file), source(file))
+            let task = Task { try? await library.downloads.data(id, source: source, priority: .user) }
+            reading[key] = task
+            let data = await task.value
+            reading[key] = nil
+            if let data { bytes.setObject(data as NSData, forKey: key as NSString, cost: data.count) }
+            return data
+        }
         let task = Task.detached(priority: .userInitiated) { () -> Data? in
             switch item {
             case .file(let file):
@@ -224,13 +236,51 @@ final class ArtifactMedia: NSObject, ChatMediaSource, ChatMediaPlaying, ChatMedi
     func stream(_ key: String) -> MediaStream? {
         if let stream = streams[key] { return stream }
         guard case .file(let file) = items[key], Self.isVideo(file) else { return nil }
-        let client = client
-        let (artifactId, version, path) = (artifactId, version, file.path)
-        let stream = MediaStream(name: path, mimeType: file.mimeType, size: Int(file.size)) { range in
-            try await client.artifactFile(artifactId, version: version, path: path, range: "bytes=\(range.lowerBound)-\(range.upperBound)")
-        }
+        let downloads = (library ?? Self.scratch).downloads
+        let stream = MediaStream(downloads: downloads, id: resourceID(file), source: source(file), name: file.path, mimeType: file.mimeType)
         streams[key] = stream
         return stream
+    }
+
+    // MARK: Kept files
+
+    /// Where a version's file is kept: a numbered version never changes.
+    func resourceID(_ file: AgentWire.ArtifactVersion.File) -> String { "artifact/\(artifactId)/\(version)/\(file.path)" }
+
+    /// Its bytes from the file route, a range at a time.
+    func source(_ file: AgentWire.ArtifactVersion.File) -> MediaSource {
+        let client = client
+        let (artifactId, version, path) = (artifactId, version, file.path)
+        return MediaSource(length: Int(file.size)) { range in
+            do {
+                let response = try await client.artifactFile(artifactId, version: version, path: path, range: MediaPiece.header(range))
+                return try MediaPiece.http(status: response.status, headers: response.headers, body: response.body)
+            } catch AgentClientError.status(let status, _, _) where (400..<500).contains(status) && status != 408 && status != 429 {
+                throw MediaError.status(status)
+            }
+        }
+    }
+
+    /// Where a stream reads when the computer has no folder of its own:
+    /// a temporary one, for the app's run.
+    private static let scratch = MediaLibrary(namespace: "scratch", directory: FileManager.default.temporaryDirectory.appendingPathComponent("happy-media", isDirectory: true))
+
+    func download(_ key: String) -> ChatDownload? {
+        guard let library, case .file(let file) = items[key] else { return nil }
+        return ChatDownload(boardKey: library.key(resourceID(file)), duration: durations[key])
+    }
+
+    func publishDownload(_ key: String) {
+        guard let library, case .file(let file) = items[key] else { return }
+        let (id, source) = (resourceID(file), source(file))
+        Task { await library.downloads.phase(id, source: source) }
+    }
+
+    /// A tap on a file's ring: pause what is going, else read it.
+    func toggleDownload(_ key: String) {
+        guard let library, case .file(let file) = items[key] else { return }
+        let (id, source) = (resourceID(file), source(file))
+        Task { await library.downloads.toggle(id, source: source) }
     }
 
     // MARK: Sharing
@@ -253,6 +303,18 @@ final class ArtifactMedia: NSObject, ChatMediaSource, ChatMediaPlaying, ChatMedi
         }
         let target = folder.appendingPathComponent(name)
         if FileManager.default.fileExists(atPath: target.path) { return target }
+        if case .file(let file) = item, Self.isVideo(file), let library {
+            let (id, source) = (resourceID(file), source(file))
+            guard (try? await library.downloads.complete(id, source: source, priority: .user)) != nil else { return nil }
+            let complete = library.store.completeURL(id)
+            let linked = await Task.detached(priority: .userInitiated) { () -> Bool in
+                let manager = FileManager.default
+                try? manager.createDirectory(at: folder, withIntermediateDirectories: true)
+                if (try? manager.linkItem(at: complete, to: target)) != nil { return true }
+                return (try? manager.copyItem(at: complete, to: target)) != nil
+            }.value
+            return linked ? target : nil
+        }
         if case .file(let file) = item, Self.isVideo(file) {
             let client = client
             let (artifactId, version) = (artifactId, version)

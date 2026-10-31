@@ -499,7 +499,7 @@ extension ChatRowRenderer {
     static func fileView(_ tool: ToolCall, delivery: OutboxDelivery? = nil, text: ChatRowText) -> ChatStackEntry? {
         guard let file = ToolFileInput(tool.input) else { return nil }
         let name = MeasuredText(ChatTextStyles.attachmentName.string(file.name, color: Palette.textSecondary, lineBreakMode: .byTruncatingTail, in: text.environment), maxLines: 1)
-        var attachment = ChatAttachment(ref: file.ref, thumbhash: file.thumbhash)
+        var attachment = ChatAttachment(ref: file.ref, thumbhash: file.thumbhash, size: file.size.map { Int($0) })
         var tap: ChatRowAction?
         if let delivery, let localId = tool.callId {
             let failed = if case .failed = delivery { true } else { false }
@@ -514,7 +514,9 @@ extension ChatRowRenderer {
             let layout = layout(frame.width)
             let image = layout.image.offsetBy(dx: frame.minX, dy: frame.minY)
             let nameFrame = layout.name.offsetBy(dx: frame.minX, dy: frame.minY)
-            let hits = tap.map { [ChatHit(frame: ChatUpload.ring(in: image).insetBy(dx: -8, dy: -8), action: $0)] } ?? []
+            // Sending: the ring's cross or retry. Sent: Telegram's download
+            // ring, a tap reading, pausing or resuming it.
+            let hits = tap.map { [ChatHit(frame: ChatUpload.ring(in: image).insetBy(dx: -8, dy: -8), action: $0)] } ?? [ChatHit(frame: image, action: .toggleDownload(file.ref))]
             return ([.attachment(attachment, frame: image), .text(name.layout(for: nameFrame), nameFrame)], hits)
         })
     }

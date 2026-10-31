@@ -18,6 +18,9 @@ final class Session {
     let models: ModelState
     /// What this computer last showed, for opening on it offline.
     let offline: OfflineFile?
+    /// The pictures, recordings and files its conversations showed, kept
+    /// on this phone for good (`MediaLibrary`).
+    let media: MediaLibrary?
     /// The composers' drafts, kept on this phone beside the computer's copy.
     let drafts: Drafts
     /// Colours the code blocks its conversations show.
@@ -78,6 +81,7 @@ final class Session {
     /// (`FilePreview`), so until then such leftovers stay in this app's
     /// caches.
     static func forget(_ accountID: String) {
+        MediaLibrary.forget(namespace: "agent/\(accountID)")
         OfflineFile.remove(accountID)
         StoriesSession.forget(accountID)
         guard let session = sessions.removeValue(forKey: accountID) else { return }
@@ -105,6 +109,7 @@ final class Session {
     }
 
     private init(accountID: String, engine: SyncEngine, account: AccountController) {
+        media = MediaLibrary.agent(accountID)
         self.accountID = accountID
         computerName = account.agentConnections.accounts.first { $0.id == accountID }?.name ?? "agent connection"
         placeholderSeed = account.agentConnections.placeholderSeed(for: accountID) ?? accountID

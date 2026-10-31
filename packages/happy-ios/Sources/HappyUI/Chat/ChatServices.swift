@@ -54,6 +54,9 @@ struct ChatServices {
     var resume: @MainActor (_ session: SessionRecord, _ machine: MachineRecord?) async throws -> String? = { _, _ in nil }
     /// useAttachmentImage's download and decryption: a picture's bytes.
     var attachment: @Sendable (_ ref: String) async throws -> Data = { _ in throw URLError(.fileDoesNotExist) }
+    /// Where an attachment's sealed bytes come from, for the account's
+    /// `MediaLibrary`; nil reads whole pictures through `attachment`.
+    var attachmentSource: ChatAttachmentImages.Source? = nil
 
     struct Seed: Sendable {
         var session: ChatSessionState
@@ -119,6 +122,9 @@ struct ChatServices {
             },
             attachment: { [sync = account.sync] ref in
                 try await sync.downloadAttachment(sessionId: sessionId, ref: ref)
+            },
+            attachmentSource: { [sync = account.sync] ref, size in
+                try await sync.attachmentSource(sessionId: sessionId, ref: ref, size: size)
             }
         )
     }

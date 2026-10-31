@@ -91,6 +91,9 @@ enum ChatDrawItem {
     /// A picture or recording a V2 agent presented, or a photo the
     /// person sent, loaded once it is on screen.
     case media(ChatMedia, frame: CGRect)
+    /// A file card's chip and detail line while its file may still be on
+    /// its way: the ring or the glyph, and the size or how much is here.
+    case fileStatus(ChatFileStatus, frame: CGRect)
     /// Live content of its own, drawn by a view that reads and follows it.
     case embed(ChatEmbed, frame: CGRect)
 }
@@ -152,6 +155,23 @@ struct ChatUpload: Equatable, Sendable {
     }
 }
 
+/// A file card's live part (`ChatFileStatusView`): in the card's own
+/// coordinates, its chip, where the glyph or Telegram's ring goes, and its
+/// detail line, which says the kind and then the size or progress.
+struct ChatFileStatus: Equatable, Sendable {
+    /// The media's `ChatMedia.key`.
+    var key: String
+    var glyph: Icon
+    var glyphSize: CGFloat
+    /// The kind before the size ("PDF"), nil when it has none.
+    var kind: String?
+    /// The size presented with it.
+    var size: Int?
+    var chip: CGRect
+    var detail: CGRect
+    var fontScale: CGFloat
+}
+
 /// A picture the person attached: `ref` under the session's attachments,
 /// and its thumbhash, shown until the picture arrives.
 struct ChatAttachment: Equatable, Sendable {
@@ -162,6 +182,8 @@ struct ChatAttachment: Equatable, Sendable {
     var local: String? = nil
     /// Still going to the server: its ring.
     var upload: ChatUpload? = nil
+    /// The plaintext's size, as the file event says it.
+    var size: Int? = nil
 }
 
 /// What a tap on part of a row does.
@@ -190,6 +212,10 @@ enum ChatRowAction: Equatable, Sendable {
     case mermaidHeight(row: String, index: Int, height: CGFloat)
     /// A V2 picture or recording, opened whole by its `ChatMedia.key`.
     case openMedia(String)
+    /// A media file's ring (or a video's badge): pause its download, or
+    /// start or resume it; one already here opens instead. By its
+    /// `ChatMedia.key`, or a legacy attachment's ref.
+    case toggleDownload(String)
     /// A V2 artifact's card.
     case openArtifact(Artifact)
 
