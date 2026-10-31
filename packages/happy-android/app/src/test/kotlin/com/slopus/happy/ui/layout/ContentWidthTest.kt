@@ -65,6 +65,17 @@ class ContentWidthTest {
         assertEquals(false, fold.isTablet)
         assertEquals(672.dp, fold.contentMaxWidth)
 
+        // On its side too: still medium, still one pane.
+        val sideways = WindowLayout.of(832.dp, 750.dp)
+        assertEquals(WidthClass.Medium, sideways.widthClass)
+        assertEquals(false, sideways.isTablet)
+        assertEquals(672.dp, sideways.contentMaxWidth)
+
+        // The shell and the expanded tokens start together.
+        val expanded = WindowLayout.of(840.dp, 750.dp)
+        assertEquals(WidthClass.Expanded, expanded.widthClass)
+        assertEquals(true, expanded.isTablet)
+
         // Wide enough for the shell, and held in as well.
         val wide = WindowLayout.of(900.dp, 731.dp)
         assertEquals(true, wide.isTablet)

@@ -91,7 +91,8 @@ import java.time.ZoneOffset
 
 /**
  * The layout tokens ([ContentTokens]) as the screens lay them out, at a
- * phone (411), a Galaxy Z Fold7's inner screen upright (750) and a tablet
+ * phone (411), a Galaxy Z Fold7's inner screen upright (750) and on its side
+ * (832, still one pane under the 840 shell) and a tablet
  * (1280): content keeps one keyline either side, [keyline] in from the
  * window, and every top bar's leading and trailing glyphs (the visible
  * 24 dp icon or 32 dp avatar, not its 48 dp target) sit on it, over the
@@ -319,6 +320,10 @@ class FoldableLayoutPhoneTest : FoldableLayoutTest(411, 16.dp)
 /** A Galaxy Z Fold7's inner screen upright (1968 px at 420 dpi): medium, a 640 measure centred, 55 in. */
 @Config(qualifiers = "w750dp-h832dp-xxhdpi")
 class FoldableLayoutFoldTest : FoldableLayoutTest(750, 55.dp)
+
+/** The same Fold on its side (832): still medium, under the 840 shell, so one pane, 96 in. */
+@Config(qualifiers = "w832dp-h750dp-xxhdpi")
+class FoldableLayoutFoldSidewaysTest : FoldableLayoutTest(832, 96.dp)
 
 /** A tablet on its side: expanded, the 800 column centred, 256 in. */
 @Config(qualifiers = "w1280dp-h800dp-xhdpi")

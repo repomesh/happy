@@ -88,8 +88,9 @@ object TabletShellSpec {
 /**
  * SidebarNavigator.tsx `isDesktopLayout`, with firstRunOnboarding.ts
  * `shouldSuppressTabletShell` on native Android: signed in, a window at least
- * 768 wide, and not on an `onboarding/` route. Unlike happy-app, having no
- * computer linked keeps the shell: the link state is home's empty state.
+ * 840 wide (Material expanded; happy-app says 768), and not on an `onboarding/`
+ * route. Unlike happy-app, having no computer linked keeps the shell: the
+ * link state is home's empty state.
  */
 object TabletShellRule {
     fun suppressesShell(signedIn: Boolean, isTablet: Boolean, isOnboardingRoute: Boolean): Boolean =
@@ -133,7 +134,7 @@ object TabletShellRule {
  * snaps the drawer; the header's 28 controls stay put, centred in the header
  * row under the status bar. Back is dimmed to 0.3 with nothing to go back to.
  * The stack keeps its place in the tree whichever way the shell goes, so
- * crossing 768 (rotation, a fold, a resized window) keeps every screen's state.
+ * crossing 840 (rotation, a fold, a resized window) keeps every screen's state.
  */
 @Composable
 fun TabletShell(

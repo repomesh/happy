@@ -31,7 +31,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The window crossing 768 swaps the phone's home for the tablet sidebar's,
+ * The window crossing 840 swaps the phone's home for the tablet sidebar's,
  * which throws the list away and used to rebuild it at the top. Home's place
  * now lives above that swap, in [HomeServices.homeListOffsets], keyed by
  * account, and a rebuilt list is created from it. These cover the recording

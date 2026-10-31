@@ -108,20 +108,22 @@ edges.
   width.
 
 **Single pane on the Fold.** Agreed with the compose and tablet agent: the
-Fold upright (750) is one pane with the centred column above. The
-two-pane tablet shell keeps its 768 breakpoint (`TabletBreakpoint`), so
-the Fold on its side (832) is still the shell; under the shell the same
-tokens apply inside the detail pane. Moving the shell to Material's 840
-(expanded), which would keep the Fold single-pane both ways, is left to
-Steve.
+Fold upright (750) is one pane with the centred column above. Steve then
+moved the two-pane tablet shell from happy-app's 768 to Material's 840
+(expanded): `TabletBreakpoint` is now `WidthClass.expandedMin`, one number
+for both, so the Fold on its side (832) is also one pane with the medium
+column, and the shell and the expanded tokens start together. Under the
+shell the same tokens apply inside the detail pane.
 
 ## Tests
 
 `ui/layout/FoldableLayoutTest.kt` runs agent home, legacy home, the
 agent chat, the legacy chat, settings, artifacts and a surface at 411
-(phone), 750 (Fold inner) and 1280 (tablet) and asserts that content
+(phone), 750 (Fold inner upright), 832 (on its side) and 1280 (tablet) and asserts that content
 starts and ends on the keyline the tokens give, and that the bar's
 leading glyph's left edge and trailing glyph's right edge are the
 content's. `ContentWidthTest` pins the classes, tokens and keylines;
 `ContentWidthCallersTest` the modifier through a real `ItemGroup`.
+`TabletShellTest` signs in at 750, 768 and 832 (one pane, phone home on
+the medium keyline) and at 840 (the shell, a 252 sidebar).
 With `HAPPY_SHOTS_DIR` set they write `foldable-<screen>-<width>.png`.

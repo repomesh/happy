@@ -68,8 +68,14 @@ class WindowLayoutTest {
 
     @Test
     fun tabletIsAWindowWidthRule() {
-        assertFalse(TabletBreakpoint.isTablet(767.dp))
-        assertTrue(TabletBreakpoint.isTablet(768.dp))
+        // Material's expanded class, the same 840 as the content tokens.
+        assertEquals(WidthClass.expandedMin, TabletBreakpoint.minWidth)
+        assertFalse(TabletBreakpoint.isTablet(768.dp))
+        assertFalse(TabletBreakpoint.isTablet(839.dp))
+        assertTrue(TabletBreakpoint.isTablet(840.dp))
+        // A Galaxy Z Fold7's inner screen either way up is one pane.
+        assertFalse(WindowLayout.of(750.dp, 832.dp).isTablet)
+        assertFalse(WindowLayout.of(832.dp, 750.dp).isTablet)
         // A keyboard halving the height leaves it a tablet.
         assertTrue(WindowLayout.of(1280.dp, 300.dp).isTablet)
         // A foldable's 673-wide inner screen is not; a phone on its side is.
@@ -92,7 +98,7 @@ class WindowLayoutTest {
         assertFalse(phone.isTablet)
         assertEquals(64.dp, phone.headerHeight)
 
-        // An unfolded foldable: the tablet shell from 768 wide, and held to the cap too, though
+        // An unfolded foldable: the tablet shell from 840 wide, and held to the cap too, though
         // its diagonal still reads as a phone. Content width answers to the window, not the class.
         val unfolded = WindowLayout.of(841.dp, 701.dp)
         assertTrue(unfolded.isTablet)

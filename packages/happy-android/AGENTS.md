@@ -74,7 +74,10 @@ architectures comparable (local store, delta sync, crypto layer).
    its font, where RN converts the line height separately, so at large
    scales our lines run a few dp taller.
    **Tablet:** `ui/layout/WindowLayout.kt` answers responsive.ts and
-   layout.ts through `LocalWindowLayout` (the tablet shell is width ≥ 768).
+   layout.ts through `LocalWindowLayout`. The two-pane tablet shell is
+   Material's expanded class, width ≥ 840 (`TabletBreakpoint` reads
+   `WidthClass.expandedMin`; happy-app's 768 is deliberately not used), so
+   the Fold7's inner screen, 750 upright and 832 on its side, is one pane.
    Read it, not `LocalConfiguration`, for any `useIsTablet` branch.
    **Horizontal layout is one token set by Material width class**
    (`ContentTokens`, research/foldable-layout.md): compact (< 600) 16 margin
@@ -86,7 +89,8 @@ architectures comparable (local store, delta sync, crypto layer).
    same column with 48 targets 4 in, so a 24 glyph's edge is on the keyline;
    never pad a bar control from the outside. Dialogs take
    `ContentTokens.dialogMaxWidth`, sheets `sheetMaxWidth`.
-   `ui/layout/FoldableLayoutTest` checks screens at 411, 750 and 1280. `ui/tablet/TabletShell`
+   `ui/layout/FoldableLayoutTest` checks screens at 411, 750, 832 and 1280;
+   `TabletShellTest` pins one pane at 750, 768 and 832 and the shell at 840. `ui/tablet/TabletShell`
    wraps HappyApp's NavHost; under it `LocalTabletShell` is true and
    `HeaderBackButton` renders nothing. Tablet tests use
    `w1280dp-h800dp-xhdpi`; without `ProvideWindowLayout` a composable lays

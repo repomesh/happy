@@ -53,13 +53,15 @@ object DeviceCalculations {
 /**
  * responsive.ts `useIsTablet`: the tablet layout is a window rule, not a
  * device class. Width alone, so a keyboard shrinking the window never folds
- * the sidebar away. "At 768 logical pixels the sidebar is 250px and leaves
- * 518px for content."
+ * the sidebar away. happy-app splits at 768; here the two-pane shell is
+ * Material's expanded class ([WidthClass.expandedMin], 840), so a book
+ * foldable unfolded (750 upright, 832 on its side) stays one pane with the
+ * medium column either way.
  */
 object TabletBreakpoint {
-    val minWidth = 768.dp
+    val minWidth: Dp get() = WidthClass.expandedMin
 
-    fun isTablet(windowWidth: Dp): Boolean = windowWidth >= minWidth
+    fun isTablet(windowWidth: Dp): Boolean = WidthClass.of(windowWidth) == WidthClass.Expanded
 
     /** `useIsLandscape`. */
     fun isLandscape(width: Dp, height: Dp): Boolean = width > height
@@ -70,6 +72,7 @@ object TabletBreakpoint {
  * under 600, medium to 839, expanded from 840. A phone upright is compact;
  * a book foldable unfolded (the Galaxy Z Fold7's inner screen is 750 dp
  * upright, 832 on its side) and a small tablet upright are medium.
+ * Expanded is also where the two-pane tablet shell starts ([TabletBreakpoint]).
  */
 enum class WidthClass {
     Compact, Medium, Expanded;

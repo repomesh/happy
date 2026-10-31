@@ -51,8 +51,9 @@ private const val TABLET_WIDTH = 1280
 
 /**
  * SidebarNavigator.tsx on a signed-in window: the sidebar (30% of the window,
- * 250–360) beside the stack from 768 wide, the persistent header's zen and
- * back over both, Home blank in the detail; just the stack below 768.
+ * 250–360) beside the stack from 840 wide (Material expanded), the persistent
+ * header's zen and back over both, Home blank in the detail; just the stack
+ * below 840, which keeps a book foldable one pane both ways (750 and 832).
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
@@ -257,10 +258,37 @@ class TabletShellTest {
         assertDp("detail after it", 252, rule.node(TabletShellTags.DETAIL).bounds.left)
     }
 
+    // At exactly 840, Material's expanded class, the shell starts: a 252 sidebar (30%).
+    @Test
+    @Config(qualifiers = "w840dp-h750dp-xhdpi")
+    fun theShellStartsAt840() {
+        session("a", 200)
+        signIn()
+        waitFor(FlatRowTags.ROW)
+        val sidebar = rule.node(TabletSidebarTags.SIDEBAR).bounds
+        assertDp("sidebar 30% of 840", 252, sidebar.right - sidebar.left)
+        assertDp("detail after it", 252, rule.node(TabletShellTags.DETAIL).bounds.left)
+    }
+
     // The same foldable upright, 673 wide, and a phone: no shell, the phone home.
     @Test
     @Config(qualifiers = "w673dp-h841dp-xhdpi")
     fun foldablePortraitIsAPhone() = assertPhoneHome(ContentTokens.Medium.keyline(673.dp))
+
+    // happy-app's old 768 cutoff: medium, one pane.
+    @Test
+    @Config(qualifiers = "w768dp-h1024dp-xhdpi")
+    fun at768ItIsOnePane() = assertPhoneHome(ContentTokens.Medium.keyline(768.dp))
+
+    // A Galaxy Z Fold7 on its side, 832 wide: medium, one pane, the centred column.
+    @Test
+    @Config(qualifiers = "w832dp-h750dp-xxhdpi")
+    fun foldSidewaysIsOnePane() = assertPhoneHome(ContentTokens.Medium.keyline(832.dp))
+
+    // The Fold upright, 750 wide: one pane.
+    @Test
+    @Config(qualifiers = "w750dp-h832dp-xxhdpi")
+    fun foldUprightIsOnePane() = assertPhoneHome(ContentTokens.Medium.keyline(750.dp))
 
     @Test
     @Config(qualifiers = PHONE)
