@@ -45,7 +45,8 @@ final class HostedAttachGestureTests: XCTestCase {
 
     private var pace: Double { ProcessInfo.processInfo.environment["HAPPY_RECORD_PACE"].flatMap(Double.init) ?? 0 }
 
-    private func present(_ library: FixtureAttachLibrary = FixtureAttachLibrary(access: .authorized, count: 60), style: UIUserInterfaceStyle = .unspecified) async throws -> AttachSheetViewController {
+    /// `plus` stands in for the composer's "+": the sheet grows out of it.
+    private func present(_ library: FixtureAttachLibrary = FixtureAttachLibrary(access: .authorized, count: 60), style: UIUserInterfaceStyle = .unspecified, plus: Bool = false) async throws -> AttachSheetViewController {
         root = UIViewController()
         root.view.backgroundColor = .systemBackground
         let window = hostedKeyWindow(in: try await hostedActiveScene(), root: root)
@@ -53,6 +54,13 @@ final class HostedAttachGestureTests: XCTestCase {
         self.window = window
         let sheet = AttachSheetViewController(limit: 10, library: library, camera: true)
         sheet.onGone = { [weak self] in self?.gone += 1 }
+        if plus {
+            let button = UIView(frame: CGRect(x: 16, y: window.bounds.height - 34 - 44 - 8, width: 44, height: 44))
+            button.backgroundColor = .systemGray5
+            button.layer.cornerRadius = 22
+            root.view.addSubview(button)
+            sheet.button = { [weak button] in button }
+        }
         root.present(sheet, animated: false)
         try await Task.sleep(for: .milliseconds(700) + .seconds(pace))
         sheet.view.layoutIfNeeded()
@@ -202,6 +210,53 @@ final class HostedAttachGestureTests: XCTestCase {
         _ = sheet.accessibilityPerformEscape()
         try await wait { self.root.presentedViewController == nil }
         XCTAssertEqual(gone, 1)
+    }
+
+    /// The sheet's clip as drawn, each frame, in the window's space.
+    private func film(_ sheet: AttachSheetViewController, for seconds: Double, while act: () async throws -> Void) async throws -> [CGRect] {
+        var frames: [CGRect] = []
+        let clip = try XCTUnwrap(views(sheet.view).first { $0.accessibilityIdentifier == "attach-sheet" })
+        let recorder = TickRecorder { _ in
+            guard let window = clip.window else { return }
+            let layer = clip.layer.presentation() ?? clip.layer
+            frames.append(layer.convert(layer.bounds, to: window.layer.presentation() ?? window.layer))
+        }
+        try await act()
+        try await Task.sleep(for: .seconds(seconds))
+        recorder.stop()
+        return frames
+    }
+
+    /// Dragged away, the glass sheet goes on from where the finger left it
+    /// into the "+": its first frame after the finger lifts is the dropped
+    /// one, then it shrinks over frames onto the button.
+    func testDraggedAwayItShrinksIntoThePlusFromTheFinger() async throws {
+        let sheet = try await present(plus: true)
+        let layout = try XCTUnwrap(sheet.sheet)
+        let button = try XCTUnwrap(sheet.button?()).frame
+        let clip = try XCTUnwrap(views(sheet.view).first { $0.accessibilityIdentifier == "attach-sheet" })
+        let start = point(sheet)
+        var lifted: CGFloat = 0
+        let frames = try await film(sheet, for: 0.8) {
+            try await drag(sheet, at: start, by: Array(repeating: 10, count: 8), speed: 600, each: { _ in
+                lifted = clip.convert(clip.bounds, to: nil).minY
+            })
+        }
+        XCTAssertGreaterThan(lifted, layout.restTop + 70, "the sheet didn't follow the finger down")
+        try await wait { self.root.presentedViewController == nil }
+        let after = frames.drop { $0.minY < lifted - 1 }
+        let first = try XCTUnwrap(after.first)
+        XCTAssertEqual(first.minY, lifted, accuracy: 30, "the way out didn't start where the finger left it")
+        let shrinking = after.filter { $0.width > button.width + 4 && $0.width < first.width - 4 }
+        XCTAssertGreaterThanOrEqual(shrinking.count, 4, "it didn't shrink over frames: \(after.prefix(12).map { Int($0.width) })")
+        let last = try XCTUnwrap(frames.last)
+        XCTAssertEqual(last.midX, button.midX, accuracy: 12)
+        XCTAssertEqual(last.midY, button.midY, accuracy: 12)
+        XCTAssertEqual(gone, 1)
+    }
+
+    private func point(_ sheet: AttachSheetViewController) -> CGPoint {
+        CGPoint(x: sheet.view.bounds.midX, y: (sheet.sheet?.restTop ?? 300) + 300)
     }
 
     // MARK: The grid

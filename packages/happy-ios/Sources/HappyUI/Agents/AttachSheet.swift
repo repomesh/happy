@@ -283,8 +283,12 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDelegat
         if access.reads { library.load { [weak self] in self?.loaded() } }
     }
 
+    // The way in starts once the sheet is measured in its window: here, or
+    // at the first layout after (a presentation without animation can
+    // reach here before its view has ever been laid out).
     override func viewIsAppearing(_ animated: Bool) {
         super.viewIsAppearing(animated)
+        view.setNeedsLayout()
         view.layoutIfNeeded()
         animateIn()
     }
@@ -380,6 +384,7 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDelegat
                 top = next.top(expanded: expanded)
             }
         }
+        if !shown, view.window != nil { return animateIn() }
         guard !morphing else { return }
         place()
         layoutBody()
@@ -546,7 +551,7 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDelegat
     /// from below the screen over 0.4 s; the dim fades in over 0.3, linear;
     /// an iPad's card the same, its dim a tenth as dark.
     private func animateIn() {
-        guard !shown, let sheet else { return }
+        guard !shown, let sheet, view.window != nil, view.bounds.width > 0 else { return }
         shown = true
         expanded = !sheet.canCollapse
         top = sheet.top(expanded: expanded)
@@ -674,9 +679,16 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDelegat
         UIView.animate(withDuration: AttachMenuMotion.closeDuration, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
             self.dim.alpha = 0
         }
+        let glassButton = sheet.style == .sheet && !UIAccessibility.isReduceMotionEnabled ? (hiddenButton ?? button?()).flatMap { $0.window === view.window ? $0 : nil } : nil
         switch how {
         case let .dragged(velocity):
-            // `interactivelyDismissed`: on down with damping 180, the
+            // Glass: from where the finger left it, into the "+", carrying
+            // the finger's speed (`animateOut` after `interactivelyDismissed`).
+            if let glassButton {
+                morphOut(into: glassButton, velocity: velocity, completion: gone)
+                return
+            }
+            // Else `interactivelyDismissed`: on down with damping 180, the
             // finger's speed over the screen left under the sheet.
             let distance = max(1, view.bounds.height - (top + drop))
             let animator = UIViewPropertyAnimator(duration: AttachMenuMotion.settleDuration, timingParameters: AttachMenuSprings.custom(damping: AttachMenuMotion.dismissDamping, duration: AttachMenuMotion.settleDuration, velocity: max(0, velocity) / distance))
@@ -685,8 +697,8 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDelegat
             animator.addCompletion { _ in gone() }
             animator.startAnimation()
         case .closed:
-            if sheet.style == .sheet, let button = hiddenButton ?? button?(), button.window === view.window, !UIAccessibility.isReduceMotionEnabled {
-                morphOut(into: button, completion: gone)
+            if let glassButton {
+                morphOut(into: glassButton, velocity: 0, completion: gone)
                 return
             }
             UIView.animate(withDuration: AttachMenuMotion.closeDuration, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
@@ -698,7 +710,8 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDelegat
 
     /// `AttachmentController.animateOut`, glass: the clip shrinks back into
     /// the "+" as the page fades off its glass and the "+" comes back on it.
-    private func morphOut(into button: UIView, completion: @escaping () -> Void) {
+    /// `velocity` is a drag's, down positive.
+    private func morphOut(into button: UIView, velocity: CGFloat, completion: @escaping () -> Void) {
         typealias M = AttachMenuMotion.Morph
         let target = button.convert(button.bounds, to: host)
         morphing = true
@@ -708,7 +721,9 @@ final class AttachSheetViewController: UIViewController, UICollectionViewDelegat
         morphGlass.alpha = 0
         morphGlyph.alpha = 0
         let center = CGPoint(x: target.midX, y: target.midY)
-        let position = UIViewPropertyAnimator(duration: M.positionDuration, timingParameters: AttachMenuSprings.custom(damping: M.positionDamping, duration: M.positionDuration, velocity: 0))
+        let distance = center.y - clip.center.y
+        let relative = abs(distance) > 1 ? max(0, velocity / distance) : 0
+        let position = UIViewPropertyAnimator(duration: M.positionDuration, timingParameters: AttachMenuSprings.custom(damping: M.positionDamping, duration: M.positionDuration, velocity: relative))
         position.addAnimations { self.clip.center = center }
         let size = UIViewPropertyAnimator(duration: M.outScaleDuration, timingParameters: AttachMenuSprings.custom(damping: M.outDamping, duration: M.outScaleDuration, velocity: 0))
         size.addAnimations {

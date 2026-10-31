@@ -347,6 +347,99 @@ final class HostedAttachMenuTests: XCTestCase {
         try await Task.sleep(for: .seconds(pace))
     }
 
+    // MARK: In and out
+
+    /// What is on screen each frame: the sheet's clip and the dim as drawn
+    /// (their presentation layers), in the window's space.
+    private struct Frame {
+        var clip: CGRect
+        var dim: Float
+    }
+
+    private func film(_ sheet: @escaping () -> AttachSheetViewController?, for seconds: Double, while act: () async throws -> Void) async throws -> [Frame] {
+        var frames: [Frame] = []
+        let recorder = TickRecorder { _ in
+            guard let sheet = sheet(), sheet.isViewLoaded, let window = sheet.view.window,
+                  let clip = self.views(sheet.view).first(where: { $0.accessibilityIdentifier == "attach-sheet" }),
+                  let dim = self.views(sheet.view).first(where: { $0.accessibilityIdentifier == "attach-dim" }) else { return }
+            let layer = clip.layer.presentation() ?? clip.layer
+            let frame = layer.convert(layer.bounds, to: window.layer.presentation() ?? window.layer)
+            frames.append(Frame(clip: frame, dim: (dim.layer.presentation() ?? dim.layer).opacity))
+        }
+        try await act()
+        try await Task.sleep(for: .seconds(seconds))
+        recorder.stop()
+        return frames
+    }
+
+    /// The "+" as a finger opens it: the sheet grows out of the button
+    /// over several frames, from about the button's size to its own, while
+    /// the dim fades in; closed, it shrinks back into the button and the
+    /// dim fades out. Neither may land in one frame.
+    func testTheMenuGrowsOutOfThePlusAndBackIntoIt() async throws {
+        try await open(FixtureAttachLibrary(access: .authorized, count: 30))
+        let plus = try plus()
+        let button = plus.convert(plus.bounds, to: nil)
+        let opening = try await film({ self.chat.presentedViewController as? AttachSheetViewController }, for: 0.8) {
+            plus.sendActions(for: .touchUpInside)
+        }
+        let sheet = try XCTUnwrap(chat.presentedViewController as? AttachSheetViewController)
+        let rest = try XCTUnwrap(opening.last).clip
+        let growing = opening.filter { $0.clip.width > button.width + 4 && $0.clip.width < rest.width - 4 }
+        XCTAssertGreaterThanOrEqual(growing.count, 5, "the sheet didn't grow over frames: \(opening.prefix(12).map { Int($0.clip.width) })")
+        XCTAssertLessThan(try XCTUnwrap(opening.first).clip.width, rest.width / 2, "the first frame was already big")
+        XCTAssertGreaterThanOrEqual(opening.filter { $0.dim > 0.05 && $0.dim < 0.95 }.count, 4, "the dim didn't fade in")
+        XCTAssertEqual(rest.width, sheet.view.bounds.width, accuracy: 12)
+
+        let closing = try await film({ sheet }, for: 0.8) {
+            try XCTUnwrap(view("attach-close", in: sheet.view) as? UIControl).sendActions(for: .touchUpInside)
+        }
+        try await wait { self.chat.presentedViewController == nil }
+        let shrinking = closing.filter { $0.clip.width > button.width + 4 && $0.clip.width < rest.width - 4 }
+        XCTAssertGreaterThanOrEqual(shrinking.count, 4, "the sheet didn't shrink over frames: \(closing.prefix(12).map { Int($0.clip.width) })")
+        XCTAssertGreaterThanOrEqual(closing.filter { $0.dim > 0.05 && $0.dim < 0.95 }.count, 3, "the dim didn't fade out")
+        let last = try XCTUnwrap(closing.last).clip
+        XCTAssertEqual(last.midX, button.midX, accuracy: 12, "it didn't go back into the +")
+        XCTAssertEqual(plus.alpha, 1, "the + stayed hidden")
+    }
+
+    /// A picture waiting in the composer grows in over frames and, taken
+    /// out, shrinks and fades over frames before it goes.
+    func testComposerPicturesGrowInAndShrinkOut() async throws {
+        try await open(FixtureAttachLibrary(access: .authorized, count: 4))
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("chip-\(UUID().uuidString).png")
+        try UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        }.pngData()?.write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let strip = try XCTUnwrap(views(card).compactMap { $0 as? AttachmentStripView }.first)
+        func scales(while change: () -> Void) async throws -> [CGFloat] {
+            var seen: [CGFloat] = []
+            let recorder = TickRecorder { _ in
+                // Only what can be seen: the strip hidden hides its pictures.
+                guard !strip.isHidden else { return }
+                for view in strip.drawnThumbnails {
+                    seen.append((view.layer.presentation() ?? view.layer).affineTransform().a)
+                }
+            }
+            change()
+            try await Task.sleep(for: .milliseconds(600))
+            recorder.stop()
+            return seen
+        }
+        var config = card.configuration
+        config.attachments = [AgentInputAttachmentPreview(id: "a", fileURL: file, mimeType: "image/png")]
+        let growing = try await scales { self.card.configuration = config }
+        XCTAssertGreaterThanOrEqual(growing.filter { $0 > 0.25 && $0 < 0.95 }.count, 4, "it didn't grow in: \(growing.prefix(12))")
+        XCTAssertEqual(growing.last ?? 0, 1, accuracy: 0.001)
+
+        config.attachments = []
+        let shrinking = try await scales { self.card.configuration = config }
+        XCTAssertGreaterThanOrEqual(shrinking.filter { $0 > 0.25 && $0 < 0.95 }.count, 4, "it didn't shrink out: \(shrinking.prefix(12))")
+        XCTAssertTrue(strip.drawnThumbnails.isEmpty, "it stayed")
+    }
+
     // MARK: Upload progress
 
     /// A tile's ring as the board says, applied once a frame however many
