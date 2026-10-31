@@ -21,6 +21,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -172,7 +173,13 @@ class HomeLayoutTest {
         assertTrue("the account menu at the start", menu.left < 30.dp)
         assertDp("account menu centred in the bar", (bar.top + bar.bottom) / 2, (menu.top + menu.bottom) / 2)
         val settingsButton = rule.node(HomeTags.SETTINGS).bounds
-        assertTrue("settings ends at the bar's end inset", bar.right - settingsButton.right <= 16.dp)
+        // The bar's outer glyphs stand on the rows' content inside the cards: the avatar's left on the first row's, settings' 24 glyph's right where the rows' content ends.
+        val rowAvatar = rule.onAllNodesWithTag(FlatRowTags.AVATAR, useUnmergedTree = true)[0].getUnclippedBoundsInRoot()
+        val rowEnd = rule.onAllNodesWithTag(FlatRowTags.TOP_RIGHT, useUnmergedTree = true)[0].getUnclippedBoundsInRoot()
+        assertDp("the row's avatar 32 in", 32, rowAvatar.left)
+        assertDp("the account avatar on the row's", rowAvatar.left, (menu.left + menu.right) / 2 - 16.dp)
+        assertDp("the row's content ends 32 in", bar.right - 32.dp, rowEnd.right)
+        assertDp("the settings glyph ends with the row's content", rowEnd.right, (settingsButton.left + settingsButton.right) / 2 + 12.dp)
         // The account's name, the smaller bar title; online says nothing.
         rule.onNodeWithText("Steve", useUnmergedTree = true).assertExists()
         assertDp("title line", with(rule.density) { AgentHomeSpec.barTitle.lineHeight.toDp() }, rule.node(HomeTags.TITLE).bounds.height())

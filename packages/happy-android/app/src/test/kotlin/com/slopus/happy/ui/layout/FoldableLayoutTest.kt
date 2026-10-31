@@ -53,6 +53,7 @@ import com.slopus.happy.ui.chat.ChatScreenTags
 import com.slopus.happy.ui.chat.ComposerTags
 import com.slopus.happy.ui.chat.MessageTags
 import com.slopus.happy.ui.components.HeaderTags
+import com.slopus.happy.ui.components.HomeCardSpec
 import com.slopus.happy.ui.components.ItemGroupTags
 import com.slopus.happy.ui.connection.AgentHomeActions
 import com.slopus.happy.ui.connection.AgentHomeLayoutTest
@@ -65,6 +66,7 @@ import com.slopus.happy.ui.conversation.ConversationScreenTags
 import com.slopus.happy.ui.home.AccountMenu
 import com.slopus.happy.ui.home.AccountMenuEntry
 import com.slopus.happy.ui.home.AccountMenuTags
+import com.slopus.happy.ui.home.FlatRowTags
 import com.slopus.happy.ui.home.HomeListCallbacks
 import com.slopus.happy.ui.home.HomeListInputs
 import com.slopus.happy.ui.home.HomeScreen
@@ -96,7 +98,10 @@ import java.time.ZoneOffset
  * (1280): content keeps one keyline either side, [keyline] in from the
  * window, and every top bar's leading and trailing glyphs (the visible
  * 24 dp icon or 32 dp avatar, not its 48 dp target) sit on it, over the
- * cards, settings groups and message text below. Glyphs are centred in
+ * cards, settings groups and message text below. Home's bars sit a card's
+ * inset further in, on the content inside its cards: the account avatar on
+ * the first row's avatar or mark, the last action on the rows' ends
+ * ([assertOnRowContent]). Glyphs are centred in
  * their controls, so a glyph's edge is its control's centre less half its
  * size. With HAPPY_SHOTS_DIR set, each screen is also written there as
  * `foldable-<screen>-<width>.png`.
@@ -144,6 +149,19 @@ abstract class FoldableLayoutTest(
         if (trailing != null) assertDp("$what: the trailing glyph's edge is the content's", content.right, trailing.right)
     }
 
+    /**
+     * Home's bar over its cards: the account avatar's left edge is the first
+     * row's avatar or mark ([rowStart]), and the last action's glyph's right
+     * edge is where the rows' content ends ([rowEnd]), both a card's inset
+     * inside the keyline.
+     */
+    private fun assertOnRowContent(what: String, avatar: DpRect, trailing: DpRect, rowStart: Dp, rowEnd: Dp) {
+        assertDp("$what: rows start a card's inset inside the keyline", keyline + HomeCardSpec.inset, rowStart)
+        assertDp("$what: rows end a card's inset inside the keyline", window - keyline - HomeCardSpec.inset, rowEnd)
+        assertDp("$what: the account avatar's left is the first row's avatar's", rowStart, avatar.left)
+        assertDp("$what: the last action's glyph ends where the rows' content does", rowEnd, trailing.right)
+    }
+
     @Test
     fun theTokensGiveThisKeyline() {
         assertDp("keyline", keyline, tokens.keyline(window))
@@ -166,7 +184,12 @@ abstract class FoldableLayoutTest(
         }
         val row = rule.node(AgentHomeTags.row("agent-ab1")).bounds
         val card = DpRect(row.left + ContentTokens.inset, row.top, row.right - ContentTokens.inset, row.bottom)
-        assertOnKeylines("agent home", glyph(AccountMenuTags.BUTTON, 32.dp), glyph(AgentHomeTags.SETTINGS, 24.dp), card)
+        assertOnKeylines("agent home", null, null, card)
+        // The bar's outer glyphs stand on the content inside the cards: the first row's mark, the dots at the rows' ends.
+        val mark = first(AgentHomeTags.ROW_MARK)
+        val dot = first(AgentHomeTags.ROW_DOT)
+        assertOnRowContent("agent home", glyph(AccountMenuTags.BUTTON, 32.dp), glyph(AgentHomeTags.SETTINGS, 24.dp), mark.left, dot.right)
+        assertDp("agent home: search sits 48 before settings", glyph(AgentHomeTags.SETTINGS, 24.dp).right - 48.dp, glyph(AgentHomeTags.SEARCH, 24.dp).right)
         shot("agent-home")
     }
 
@@ -202,7 +225,11 @@ abstract class FoldableLayoutTest(
         }
         val row = first(HomeTags.CARD_ROW)
         val card = DpRect(row.left + ContentTokens.inset, row.top, row.right - ContentTokens.inset, row.bottom)
-        assertOnKeylines("legacy home", glyph(AccountMenuTags.BUTTON, 32.dp), glyph(HomeTags.SETTINGS, 24.dp), card)
+        assertOnKeylines("legacy home", null, null, card)
+        // The first row's avatar, and the slot at its end where its dot stands.
+        val avatar = first(FlatRowTags.AVATAR)
+        val end = first(FlatRowTags.TOP_RIGHT)
+        assertOnRowContent("legacy home", glyph(AccountMenuTags.BUTTON, 32.dp), glyph(HomeTags.SETTINGS, 24.dp), avatar.left, end.right)
         shot("legacy-home")
     }
 

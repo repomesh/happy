@@ -217,6 +217,7 @@ private fun HomeHeader(connectionStatus: ConnectionStatus, accounts: AccountMenu
         actions = {
             BarIconButton(Ionicon.SettingsOutline, stringResource(R.string.settings_title), actions.onSettings, Modifier.testTag(HomeTags.SETTINGS))
         },
+        inset = HomeCardSpec.inset,
     )
 }
 

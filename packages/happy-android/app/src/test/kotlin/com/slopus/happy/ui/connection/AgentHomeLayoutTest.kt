@@ -148,7 +148,9 @@ class AgentHomeLayoutTest {
         val search = rule.node(AgentHomeTags.SEARCH).bounds
         val settingsButton = rule.node(AgentHomeTags.SETTINGS).bounds
         assertTrue(search.right <= settingsButton.left + 0.5.dp)
-        assertTrue("settings ends at the bar's end inset", bar.right - settingsButton.right <= 16.dp)
+        // The bar's outer glyphs stand on the rows' content inside the cards, 32 in: the avatar's left, settings' 24 glyph's right.
+        assertDp("the account avatar 32 in, on the rows' marks", 32, (menu.left + menu.right) / 2 - 16.dp)
+        assertDp("the settings glyph ends 32 in, where the rows' content does", bar.right - 32.dp, (settingsButton.left + settingsButton.right) / 2 + 12.dp)
         // Every bar control takes a full 48 touch (Compose widens a smaller one's), and is drawn whole inside the bar.
         val tags = mapOf("menu" to AccountMenuTags.BUTTON, "search" to AgentHomeTags.SEARCH, "settings" to AgentHomeTags.SETTINGS)
         for ((label, rect) in listOf("menu" to menu, "search" to search, "settings" to settingsButton)) {

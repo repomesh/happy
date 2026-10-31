@@ -124,7 +124,8 @@ object AccountMenuSpec {
  * Home's top-left control (AGENTS.md, design decisions: Home's top bar): the
  * open account's 32 avatar, in a 48 target with 4 either side, so in a
  * Material top app bar's navigation slot (itself 4 in) the avatar's left
- * edge is on the 16 keyline, with the cards and rows under it, and the
+ * edge is on the bar's keyline (home's bar is 16 further in, so that is
+ * the left edge of the rows' avatars and marks inside the cards), and the
  * title follows 12 after it. Tapped, a Material menu ([HappyDropdownMenu])
  * of every Happy account and agent connection on the phone (avatar, name,
  * the server or kind under it; the open one checked, one needing attention

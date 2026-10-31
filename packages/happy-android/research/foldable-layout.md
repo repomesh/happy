@@ -98,7 +98,12 @@ edges.
   session), `StackHeader`, `AgentTopBar`, and the Material `TopAppBar`s of
   the agent conversation and Chief of Staff. The account menu keeps its 32
   avatar on the keyline (48 target with 4 either side in the navigation
-  slot). On compact this also fixed `Header`: it used to put glyphs 28 in
+  slot). Home's bar, on both homes, then comes a card's 16 further in
+  (Steve: "the avatar/picker should be aligned with the left side of the
+  content inside the groups, and the same on the right"): the avatar's
+  left is the rows' avatars' and marks', the settings glyph's right the
+  rows' content end, keyline + 16 at every width (32, 71, 112, 272 from the
+  window at 411, 750, 832, 1280). On compact this also fixed `Header`: it used to put glyphs 28 in
   (16 padding + 12 of slot) while the content below was at 16.
 - **Dialogs and sheets:** `ContentTokens.dialogMaxWidth` (560, M3 basic
   dialog) for `PromptModal` and the duplicate sheet,

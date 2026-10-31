@@ -87,7 +87,14 @@ architectures comparable (local store, delta sync, crypto layer).
    `CenteredInputWidth`) *before* its own 16 inset, so cards, rows, message
    text and the bars' glyphs share one keyline per side. Top bars sit on the
    same column with 48 targets 4 in, so a 24 glyph's edge is on the keyline;
-   never pad a bar control from the outside. Dialogs take
+   never pad a bar control from the outside. Home's bar (both homes,
+   `AgentTopBar(inset = HomeCardSpec.inset)`) is the one exception: Steve
+   wants its account avatar on the left edge of the rows' avatars and marks
+   inside the cards, and its last action's glyph on the rows' content end,
+   so the whole bar comes a card's 16 further in (32 from the column's edge;
+   48 targets kept). iOS's home doesn't do this; settings' bar stays on the
+   column, as iOS's does. The compose FAB stays 16 from the column's edge,
+   as iOS's dock does. Dialogs take
    `ContentTokens.dialogMaxWidth`, sheets `sheetMaxWidth`.
    `ui/layout/FoldableLayoutTest` checks screens at 411, 750, 832 and 1280;
    `TabletShellTest` pins one pane at 750, 768 and 832 and the shell at 840. `ui/tablet/TabletShell`

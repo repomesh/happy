@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.slopus.happy.AppGraph
@@ -60,6 +61,7 @@ import com.slopus.happy.ui.components.Alert
 import com.slopus.happy.ui.components.AlertButton
 import com.slopus.happy.ui.components.GlassBarLayout
 import com.slopus.happy.ui.components.HappyAlert
+import com.slopus.happy.ui.components.HomeCardSpec
 import com.slopus.happy.ui.components.Icon
 import com.slopus.happy.ui.components.LoadingIndicator
 import com.slopus.happy.ui.components.LocalBarOnGlass
@@ -129,7 +131,9 @@ internal fun BarIconButton(icon: Ionicon, label: String, onClick: () -> Unit, mo
  * centred, so on a wide window its controls line up with the rows beneath
  * rather than sitting out at the glass. A no-op on a phone, where the
  * content width is the window ([ContentWidth]). Inside a [GlassBarLayout]
- * the colour is the glass's.
+ * the colour is the glass's. Over home's cards the bar comes [inset] further
+ * in ([HomeCardSpec.inset]), so its outer glyphs stand on the rows' content
+ * inside the cards, not on the cards' edges; the targets stay 48.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -139,12 +143,13 @@ internal fun AgentTopBar(
     navigationIcon: @Composable () -> Unit,
     title: @Composable () -> Unit,
     actions: @Composable RowScope.() -> Unit = {},
+    inset: Dp = 0.dp,
 ) {
     val layout = LocalWindowLayout.current
     // On glass the glass is the ground ([GlassBarLayout]).
     Box(Modifier.fillMaxWidth().then(if (LocalBarOnGlass.current) Modifier else Modifier.background(container))) {
         TopAppBar(
-            modifier = Modifier.contentMaxWidth(layout).testTag(tag),
+            modifier = Modifier.contentMaxWidth(layout).testTag(tag).padding(horizontal = inset),
             colors = agentBarColors(Color.Transparent),
             navigationIcon = navigationIcon,
             title = title,
@@ -230,6 +235,7 @@ fun AgentHomeScreen(
                         BarIconButton(Ionicon.SearchOutline, stringResource(R.string.tools_names_search), { searching = true }, Modifier.testTag(AgentHomeTags.SEARCH))
                         BarIconButton(Ionicon.SettingsOutline, stringResource(R.string.settings_title), actions.onSettings, Modifier.testTag(AgentHomeTags.SETTINGS))
                     },
+                    inset = HomeCardSpec.inset,
                 )
             }
         },
