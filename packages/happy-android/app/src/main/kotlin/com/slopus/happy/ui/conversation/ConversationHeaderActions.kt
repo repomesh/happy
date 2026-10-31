@@ -38,7 +38,7 @@ internal fun ConversationHeaderActions(state: ConversationState, actions: Conver
     val current = state.mode ?: state.catalog?.defaults
     var menu by rememberSaveable { mutableStateOf<HeaderMenu?>(null) }
     IconButton(onClick = actions.onCompose, modifier = Modifier.testTag(ConversationScreenTags.COMPOSE)) {
-        GlyphIcon(Ionicon.CreateOutline, 24.dp, colors.text, Modifier.testTag(ConversationScreenTags.COMPOSE_ICON), stringResource(R.string.conversation_compose))
+        GlyphIcon(Ionicon.CreateOutline, 24.dp, colors.text, Modifier.testTag(ConversationScreenTags.COMPOSE_ICON), stringResource(R.string.session_new_chat))
     }
     Box {
         IconButton(

@@ -301,7 +301,7 @@ private fun ReasoningRow(row: ConversationRow.Reasoning, modifier: Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(stringResource(R.string.conversation_thinking), style = ConversationRowSpec.label, color = colors.textSecondary)
+            Text(stringResource(R.string.session_info_thinking), style = ConversationRowSpec.label, color = colors.textSecondary)
             Icon(if (open) Ionicon.ChevronUp else Ionicon.ChevronDown, ConversationRowSpec.icon, colors.textSecondary)
         }
         if (open) Text(row.text, style = ConversationRowSpec.body, color = colors.textSecondary, modifier = Modifier.padding(top = 4.dp))

@@ -194,7 +194,7 @@ fun AgentHomeScreen(
     val headings = Triple(
         stringResource(R.string.agent_search_conversations),
         stringResource(R.string.agent_search_actions),
-        stringResource(R.string.agent_search_settings),
+        stringResource(R.string.settings_title),
     )
     val results = remember(feed, query, searchEntries) {
         agentSearchResults(feed, query, untitled, headings, searchEntries.first, searchEntries.second)
@@ -226,7 +226,7 @@ fun AgentHomeScreen(
                     navigationIcon = { AccountMenuButton(accounts, actions.onSwitchAccount, actions.onAdd) },
                     title = { BarTitle(name, barStatus(status), AgentHomeTags.TITLE, AgentHomeTags.STATUS) },
                     actions = {
-                        BarIconButton(Ionicon.SearchOutline, stringResource(R.string.agent_search_open), { searching = true }, Modifier.testTag(AgentHomeTags.SEARCH))
+                        BarIconButton(Ionicon.SearchOutline, stringResource(R.string.tools_names_search), { searching = true }, Modifier.testTag(AgentHomeTags.SEARCH))
                         BarIconButton(Ionicon.SettingsOutline, stringResource(R.string.settings_title), actions.onSettings, Modifier.testTag(AgentHomeTags.SETTINGS))
                     },
                 )
@@ -263,7 +263,7 @@ fun AgentHomeScreen(
                         art = if (statusMessage(status) == null) StateArt.Make else null,
                         title = stringResource(R.string.agent_home_empty_title),
                         body = statusMessage(status) ?: stringResource(R.string.agent_home_empty_body),
-                        action = stringResource(R.string.home_compose) to actions.onCompose,
+                        action = stringResource(R.string.session_new_chat) to actions.onCompose,
                         modifier = Modifier.padding(top = top),
                     )
                     HomePhase.List -> AgentHomeList(
@@ -377,11 +377,11 @@ private enum class HomePhase { Loading, Offline, Empty, List }
 /** The quick actions and settings search offers, and where each goes. */
 @Composable
 private fun rememberSearchEntries(actions: AgentHomeActions): Pair<List<AgentSearchEntry>, List<AgentSearchEntry>> {
-    val newChat = stringResource(R.string.agent_search_new_chat)
+    val newChat = stringResource(R.string.session_new_chat)
     val add = stringResource(R.string.agent_search_add)
     val openSettings = stringResource(R.string.agent_search_open_settings)
     val appearance = stringResource(R.string.settings_appearance)
-    val status = stringResource(R.string.agent_settings_status)
+    val status = stringResource(R.string.settings_account_status)
     val remove = stringResource(R.string.agent_settings_remove)
     return remember(actions, newChat, add, openSettings, appearance, status, remove) {
         listOf(
@@ -467,7 +467,7 @@ internal fun BoxScope.ComposeFab(onClick: () -> Unit, tag: String) {
                 .padding(AgentHomeSpec.fabMargin)
                 .testTag(tag),
         ) {
-            Icon(Ionicon.CreateOutline, 24.dp, LocalContentColor.current, contentDescription = stringResource(R.string.home_compose))
+            Icon(Ionicon.CreateOutline, 24.dp, LocalContentColor.current, contentDescription = stringResource(R.string.session_new_chat))
         }
     }
 }

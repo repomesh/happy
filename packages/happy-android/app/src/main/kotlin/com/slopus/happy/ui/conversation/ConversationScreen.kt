@@ -250,7 +250,7 @@ fun ConversationScreen(
                             // An existing chat is never "New chat", not even before it's read: blank until then.
                             ShimmerText(
                                 state.title ?: when {
-                                    !state.created -> stringResource(R.string.conversation_compose)
+                                    !state.created -> stringResource(R.string.session_new_chat)
                                     state.loaded -> stringResource(R.string.conversation_untitled)
                                     else -> ""
                                 },
@@ -283,7 +283,7 @@ fun ConversationScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = actions.onBack, modifier = Modifier.testTag(ConversationScreenTags.BACK)) {
-                        Icon(MaterialSymbols.ArrowBack, stringResource(R.string.conversation_back))
+                        Icon(MaterialSymbols.ArrowBack, stringResource(R.string.common_back))
                     }
                 },
                 actions = {

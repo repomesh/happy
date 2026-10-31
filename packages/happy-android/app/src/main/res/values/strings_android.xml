@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Strings with no happy-app catalog key, in English only. strings.xml is
-  generated from the catalogs (tools/translations); this file is not.
+  Strings with no happy-app catalog key. strings.xml is generated from the
+  catalogs (tools/translations); this file is not. Translated in values-*/ (AndroidStringsTranslatedTest).
 -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+<resources>
     <!-- Native compact composer: queued previews are in its attachment menu. -->
     <plurals name="conversation_attached_picture_count">
         <item quantity="one">%1$d attached image</item>
@@ -44,6 +44,9 @@
     <string name="scan_open_settings">Open Settings</string>
     <string name="scan_torch_on">Turn on flashlight</string>
     <string name="scan_torch_off">Turn off flashlight</string>
+
+    <!-- The compose chat's pill menu (ui/chat/ComposeChat.kt, iOS's LegacyComposeStart). -->
+    <string name="compose_chat_new_bot">New Bot…</string>
 
     <!-- State pictures (ui/components/StateAnimation.kt). -->
     <string name="state_animation_replay">Play again</string>

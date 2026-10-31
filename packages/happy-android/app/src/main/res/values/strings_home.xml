@@ -85,7 +85,6 @@
     <string name="home_dock_kind_session">Session</string>
     <string name="home_dock_kind_bot">Bot</string>
     <string name="home_dock_bot_kind">What to create</string>
-    <string name="compose_chat_new_bot">New Bot…</string>
     <string name="home_dock_bot_lede">Bots are virtual colleagues great for recurring work like releases, competitor analysis, or to own a large feature across several projects and worktrees</string>
     <string name="home_dock_bot_name_placeholder">Name your bot</string>
     <string name="home_dock_create_bot">Create bot</string>

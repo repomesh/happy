@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  values/strings_settings.xml in zh-Hant: Android-only strings, not in happy-app's
+  catalogs. AndroidStringsTranslatedTest fails while one is missing here.
+-->
+<resources>
+    <string name="settings_search_placeholder">搜尋設定</string>
+    <string name="settings_nothing_found">找不到任何內容</string>
+    <string name="settings_add_agent">新增代理程式</string>
+    <string name="settings_edit_agent">編輯代理程式</string>
+    <string name="settings_change_avatar">更換頭像</string>
+    <string name="settings_edit_name">編輯名稱</string>
+    <string name="settings_hide_projects">隱藏專案</string>
+    <string name="settings_hide_projects_footer">首頁不顯示你的專案，此處和 Happy Desktop 中皆是如此。</string>
+    <string name="settings_sign_out_title">登出？</string>
+    <string name="settings_disconnect_title">中斷代理程式連線？</string>
+    <string name="settings_happy_account">Happy 帳戶</string>
+    <string name="settings_backup_restore">備份與還原</string>
+    <string name="settings_show_secret_key">顯示金鑰</string>
+    <string name="settings_hide_secret_key">隱藏金鑰</string>
+    <string name="settings_copy_secret_key">複製金鑰</string>
+    <string name="settings_link_device_footer">掃描另一支手機在「還原」中顯示的代碼，讓它登入此帳戶。</string>
+    <string name="settings_restore_account">還原帳戶</string>
+    <string name="settings_restore_account_footer">使用另一個帳戶的金鑰或已登入它的手機登入該帳戶。此帳戶會保留在這裡。</string>
+    <string name="settings_copy_id_footer">點一下 ID 即可複製。</string>
+    <string name="settings_change_photo">更換照片</string>
+    <string name="settings_remove_photo">移除照片</string>
+    <string name="settings_could_not_save_profile">無法儲存你的個人資料</string>
+    <string name="settings_could_not_change_photo">無法更換你的照片</string>
+    <string name="settings_could_not_remove_photo">無法移除你的照片</string>
+</resources>

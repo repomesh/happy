@@ -25,7 +25,8 @@ sealed interface PairingState {
         override val agentName get() = account.name
     }
 
-    data class Failed(override val agentName: String?, val message: String) : PairingState
+    /** [reason], when there is one, is [message] in the person's language. */
+    data class Failed(override val agentName: String?, val message: String, val reason: AgentConnectionException.Reason? = null) : PairingState
 }
 
 /**
@@ -54,7 +55,7 @@ class PairingFlow(
         val parsed = try {
             PairingLink.parse(code, now())
         } catch (e: AgentConnectionException) {
-            mutableState.value = PairingState.Failed(null, e.message ?: "")
+            mutableState.value = PairingState.Failed(null, e.message ?: "", e.reason)
             return
         }
         link = parsed
@@ -84,7 +85,7 @@ class PairingFlow(
     fun reject() {
         val name = mutableState.value?.agentName
         stop()
-        mutableState.value = PairingState.Failed(name, AgentConnectionException.Reason.Rejected.message)
+        mutableState.value = PairingState.Failed(name, AgentConnectionException.Reason.Rejected.message, AgentConnectionException.Reason.Rejected)
     }
 
     /** The screen went away. An unfinished pairing is rejected. */
@@ -111,15 +112,15 @@ class PairingFlow(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AgentConnectionException) {
-                fail(name, e.message ?: "")
+                fail(name, e.reason)
             } catch (e: Exception) {
-                fail(name, AgentConnectionException.Reason.Unavailable.message)
+                fail(name, AgentConnectionException.Reason.Unavailable)
             }
         }
     }
 
-    private suspend fun fail(name: String, message: String) {
-        mutableState.value = PairingState.Failed(name, message)
+    private suspend fun fail(name: String, reason: AgentConnectionException.Reason) {
+        mutableState.value = PairingState.Failed(name, reason.message, reason)
         transport?.close()
     }
 }

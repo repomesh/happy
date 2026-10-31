@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   An agent connection's home, search and settings (ui/connection). Not in
-  happy-app's catalogs; English only, as iOS's are.
+  happy-app's catalogs. Translated in values-*/ (AndroidStringsTranslatedTest).
 -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
-    <string name="agent_home_artifacts">Artifacts</string>
+<resources>
     <string name="agent_home_working">Working…</string>
     <string name="agent_home_show_subtasks">Show subtasks</string>
     <string name="agent_home_hide_subtasks">Hide subtasks</string>
@@ -29,18 +28,14 @@
     <string name="agent_surface_open_on_computer">Open this on your computer to use it.</string>
     <string name="agent_surface_failed">Couldn\'t read this</string>
 
-    <string name="agent_search_open">Search</string>
     <string name="agent_search_placeholder">Search conversations and settings</string>
     <string name="agent_search_clear">Clear</string>
     <string name="agent_search_conversations">Conversations</string>
     <string name="agent_search_actions">Quick actions</string>
-    <string name="agent_search_settings">Settings</string>
     <string name="agent_search_no_results">No results for “%1$s”</string>
-    <string name="agent_search_new_chat">New chat</string>
     <string name="agent_search_add">Add account or agent</string>
     <string name="agent_search_open_settings">Open settings</string>
 
-    <string name="agent_settings_status">Status</string>
     <string name="agent_settings_edit_name">Edit name</string>
     <string name="agent_settings_edit_avatar">Edit avatar</string>
     <!-- Typed into the Chief of Staff's composer, unsent; the trailing space is deliberate. -->

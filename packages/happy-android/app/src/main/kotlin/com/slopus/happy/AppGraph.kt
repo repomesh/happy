@@ -391,7 +391,11 @@ class AppGraph(
                     LocalCaches.wipe(appContext)
                 }
             }
-            if (last) wipeHooks.forEach { it() }
+            if (last) {
+                wipeHooks.forEach { it() }
+                // The language was the account's setting: back to the device's, as after happy-app's reload.
+                language.apply(null)
+            }
             auth.logout()
             store.use(database(openAccountId()))
             withContext(Dispatchers.IO) { leaving?.let { forgetDatabase(accountId(it.credentials)) } }

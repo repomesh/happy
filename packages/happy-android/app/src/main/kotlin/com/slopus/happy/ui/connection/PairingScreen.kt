@@ -137,7 +137,7 @@ fun PairingScreen(
                 }
                 is PairingState.Failed -> {
                     Line(stringResource(R.string.pairing_failed), title)
-                    Line(state.message, body, secondary = true)
+                    Line(state.reason?.let { stringResource(it.text) } ?: state.message, body, secondary = true)
                     Spacer(Modifier.height(8.dp))
                     RoundButton(stringResource(R.string.pairing_done), onDone, Modifier.testTag(PairingTags.DONE))
                 }

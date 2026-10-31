@@ -2,10 +2,10 @@
 <!--
   An agent connection's artifacts, Surfaces and in-app browser (ui/artifacts,
   ui/browser). Not in happy-app's catalogs (it has no artifact screens);
-  English only, in iOS's words (Strings.Agents, Strings.ArtifactMedia,
-  BrowserViewController).
+  in iOS's words (Strings.Agents, Strings.ArtifactMedia,
+  BrowserViewController). Translated in values-*/ (AndroidStringsTranslatedTest).
 -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+<resources>
     <string name="artifact_untitled">Untitled artifact</string>
     <string name="artifact_deleted">This artifact was deleted.</string>
     <string name="artifact_unavailable">This artifact couldn’t be loaded. Check that your computer is on.</string>
@@ -13,7 +13,7 @@
     <string name="artifact_picture">Picture</string>
     <string name="artifact_video">Video</string>
     <!-- A picture or recording for TalkBack: "Picture: chart.png". -->
-    <string name="artifact_media_label">%1$s: %2$s</string>
+    <string name="artifact_media_label" translatable="false">%1$s: %2$s</string>
     <plurals name="artifact_count_images">
         <item quantity="one">%1$d image</item>
         <item quantity="other">%1$d images</item>
@@ -33,9 +33,7 @@
     <string name="browser_unreachable">Can’t reach %1$s.\nCheck the agent connection, then tap Reload.</string>
     <string name="browser_unreachable_page">Can’t reach %1$s.\nCheck the connection or page address, then tap Reload.</string>
     <string name="browser_unsupported">This phone’s WebView can’t send pages through your computer. Update Android System WebView, then tap Reload.</string>
-    <string name="browser_back">Back</string>
     <string name="browser_forward">Forward</string>
-    <string name="browser_reload">Reload</string>
     <string name="browser_close">Close</string>
     <string name="browser_share_link">Share Link</string>
     <string name="browser_open_outside">Open in browser (outside proxy)</string>

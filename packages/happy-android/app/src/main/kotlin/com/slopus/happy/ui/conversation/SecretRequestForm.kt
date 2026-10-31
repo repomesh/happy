@@ -244,7 +244,7 @@ internal fun SecretRequestForm(
                     // Only while nothing is in flight: a half-sent create whose id we
                     // threw away would leave a secret behind that nothing points at.
                     FormButton(
-                        label = stringResource(R.string.conversation_secret_cancel),
+                        label = stringResource(R.string.common_cancel),
                         tag = SecretRequestTags.CANCEL,
                         enabled = !sending,
                         background = colors.surfaceHigh,

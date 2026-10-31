@@ -48,7 +48,7 @@ fun ChiefOfStaffScreen(problem: String?, onRetry: () -> Unit, onBack: () -> Unit
                 title = { Text(stringResource(R.string.conversation_chief_of_staff)) },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag(ConversationScreenTags.BACK)) {
-                        Icon(MaterialSymbols.ArrowBack, stringResource(R.string.conversation_back))
+                        Icon(MaterialSymbols.ArrowBack, stringResource(R.string.common_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

@@ -63,7 +63,7 @@ internal fun PlaceScaffold(
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag(ConversationScreenTags.BACK)) {
                         if (closes) Icon(MaterialSymbols.Close, stringResource(R.string.browser_close))
-                        else Icon(MaterialSymbols.ArrowBack, stringResource(R.string.conversation_back))
+                        else Icon(MaterialSymbols.ArrowBack, stringResource(R.string.common_back))
                     }
                 },
                 title = {

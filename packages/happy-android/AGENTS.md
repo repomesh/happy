@@ -181,6 +181,16 @@ win:
   and neither home nor chat scrolls by itself while nothing changed.
 - **Settings cards** look the same everywhere and come from one component
   (`ItemGroup`).
+- **Settings search** (iOS's, `ui/settings/SettingsSearch.kt`), on both
+  kinds of Settings: the bar's search button turns the bar into a field
+  and hides the picture, name and cards; what is typed finds accounts by
+  name, the page's rows (`SettingsEntry`, which the page draws too) and the
+  rows of its own pages (`accountPageEntries` and the like, beside each
+  page), in one card under the bar, or "Nothing found". A page's row opens
+  that page with `reveal` in its route: it scrolls the row to the middle and
+  flashes it (`ProvideRowReveal`, `Modifier.revealRow`). A new row on such
+  a page goes in its `*PageEntries` too; `SettingsSearchTest` checks they
+  agree.
 - **QR codes:** every scan is classified (terminal, account, agent
   connection, or not ours) and routed. A code the screen can't use shows an
   error; nothing is silently ignored. Scanning works while signed in.
@@ -225,17 +235,27 @@ After happy-app's catalogs change, regenerate and commit the output:
 cd tools/translations && npm run generate
 ```
 
-`TranslationResourcesTest` fails until you do. A string happy-app doesn't
-have goes in `res/values/strings_android.xml` (English only); add it to
-happy-app's catalogs instead where you can.
+`TranslationResourcesTest` fails until you do.
+
+A string happy-app's catalogs don't have (iOS's words, Android's own) first
+reuses a catalog key whose English and meaning match exactly
+(`session_new_chat`, `common_back`, `settings_account_status`…). Otherwise it
+goes in `res/values/strings_<area>.xml` (`strings_settings.xml`,
+`strings_conversation.xml`, `strings_android.xml`…) **and** in every
+language, `values-<locale>/strings_<area>.xml` under the same name, with the
+same placeholders and each plural with that language's categories (one/few/
+many/other in Russian and Polish, one/many/other in the Romance languages,
+other alone in Japanese and Chinese). `AndroidStringsTranslatedTest` fails
+while one is missing, stale or mismatched. Brand and product names and
+literal examples (`Happy`, `Happy Cloud`, `Chief of Staff`, `deploy-api`) are
+`translatable="false"`.
 
 Where happy-app calls `t()`, use the catalog key; never re-type its English.
 Where happy-app writes English inline instead (most of HomeDock, the machine
 screen, info.tsx's activity rows, the agents and push-diagnostics settings,
 useStartSessionFromDraft's errors), the port stays English too: on screens, in
-`strings_<area>.xml` (`strings_home.xml`, `strings_tablet.xml`,
-`strings_push.xml`, `strings_android.xml`) or inline with a note naming the
-happy-app file. Text built outside composition stays a Kotlin literal, word for
+`strings_home.xml`, `strings_tablet.xml` and `strings_push.xml` (the test's
+English-only files) or inline with a note naming the happy-app file. Text built outside composition stays a Kotlin literal, word for
 word as happy-app has it: tool titles (`chat/tools`), slash-command
 descriptions (`autocomplete`), reducer events, spawn, worktree and changes
 errors, and the push diagnostics in `model/settings/Push.kt`. So do brand and
@@ -362,7 +382,8 @@ the `beforeLogout` hooks first, while signed in (the push unregister); then
 its database and credentials; the next account by added order opens. With
 the last account also go local settings, the What's New marker, the
 new-session draft (stored and in memory, `afterLogoutWipe`), picked-image
-copies and the image loader's caches. The server choice stays
+copies and the image loader's caches, and the UI language goes back to the
+device's (it was the account's setting). The server choice stays
 (`LogoutWipeTest`).
 
 **Large sessions** (`perf/LargeDataTest`, `perf/ChatDisplayTimingTest`).

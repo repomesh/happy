@@ -227,7 +227,7 @@ internal fun ConversationComposer(
                         Box(Modifier.padding(vertical = 12.dp)) {
                             if (field.text.isEmpty()) {
                                 Text(
-                                    stringResource(R.string.conversation_message_placeholder),
+                                    stringResource(R.string.common_message),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = colors.textSecondary,
                                     maxLines = 1,

@@ -134,7 +134,7 @@ fun ArtifactsScreen(
     onRetry: () -> Unit,
 ) {
     val colors = HappyTheme.colors
-    PlaceScaffold(stringResource(R.string.agent_home_artifacts), onBack, ArtifactsTags.LIST) {
+    PlaceScaffold(stringResource(R.string.artifacts_title), onBack, ArtifactsTags.LIST) {
         when {
             read.items.isEmpty() && read.failed -> StatePage(
                 title = stringResource(R.string.agent_artifacts_failed),

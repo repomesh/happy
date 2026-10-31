@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Settings as iOS lays them out (packages/happy-ios SettingsViewController,
-  SettingsAccountPages, ProfileViewController). Not in happy-app's catalogs;
-  English only, as iOS's are.
+  SettingsAccountPages, ProfileViewController). Not in happy-app's catalogs.
+  Translated in values-*/ (AndroidStringsTranslatedTest).
 -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+<resources>
     <string name="settings_search_placeholder">Search settings</string>
     <string name="settings_nothing_found">Nothing found</string>
     <string name="settings_add_agent">Add Agent</string>
@@ -25,8 +25,7 @@
     <string name="settings_restore_account">Restore an Account</string>
     <string name="settings_restore_account_footer">Sign in to another account with its secret key, or with a phone that has it. This account stays here.</string>
     <string name="settings_copy_id_footer">Tap an ID to copy it.</string>
-    <string name="settings_username">Username</string>
-    <string name="settings_default_server">Happy Cloud</string>
+    <string name="settings_default_server" translatable="false">Happy Cloud</string>
 
     <string name="settings_change_photo">Change Photo</string>
     <string name="settings_remove_photo">Remove Photo</string>

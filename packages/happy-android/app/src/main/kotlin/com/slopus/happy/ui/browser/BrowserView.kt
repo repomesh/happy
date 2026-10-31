@@ -339,7 +339,7 @@ fun BrowserView(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = { web?.goBack() }, enabled = canGoBack, modifier = Modifier.testTag(BrowserTags.BACK)) {
-                Icon(MaterialSymbols.ChevronLeft, stringResource(R.string.browser_back))
+                Icon(MaterialSymbols.ChevronLeft, stringResource(R.string.common_back))
             }
             IconButton(onClick = { web?.goForward() }, enabled = canGoForward, modifier = Modifier.testTag(BrowserTags.FORWARD)) {
                 Icon(MaterialSymbols.ChevronRight, stringResource(R.string.browser_forward))
@@ -352,7 +352,7 @@ fun BrowserView(
                 },
                 modifier = Modifier.testTag(BrowserTags.RELOAD),
             ) {
-                Icon(MaterialSymbols.Refresh, stringResource(R.string.browser_reload))
+                Icon(MaterialSymbols.Refresh, stringResource(R.string.files_reload))
             }
             ShareButton(shown, web, context)
         }

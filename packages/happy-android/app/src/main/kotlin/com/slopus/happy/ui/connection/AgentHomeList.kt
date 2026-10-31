@@ -322,7 +322,7 @@ fun LazyListScope.agentHomeRows(
                 when (val row = item.row) {
                     is AgentFeedRow.Conversation -> ConversationRow(row, onOpen)
                     is AgentFeedRow.Folder -> FolderRow(row)
-                    AgentFeedRow.Artifacts -> PlaceRow(stringResource(R.string.agent_home_artifacts), Ionicon.DocumentTextOutline, RowTile.Purple, onOpenArtifacts)
+                    AgentFeedRow.Artifacts -> PlaceRow(stringResource(R.string.artifacts_title), Ionicon.DocumentTextOutline, RowTile.Purple, onOpenArtifacts)
                     is AgentFeedRow.Surface -> SurfaceRow(row, { onOpenSurface(row) }, onLeaveSurface)
                     is AgentFeedRow.Section -> Unit
                 }

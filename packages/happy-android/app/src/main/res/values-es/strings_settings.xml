@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  values/strings_settings.xml in es: Android-only strings, not in happy-app's
+  catalogs. AndroidStringsTranslatedTest fails while one is missing here.
+-->
+<resources>
+    <string name="settings_search_placeholder">Buscar en la configuración</string>
+    <string name="settings_nothing_found">No se encontró nada</string>
+    <string name="settings_add_agent">Añadir agente</string>
+    <string name="settings_edit_agent">Editar agente</string>
+    <string name="settings_change_avatar">Cambiar avatar</string>
+    <string name="settings_edit_name">Editar nombre</string>
+    <string name="settings_hide_projects">Ocultar proyectos</string>
+    <string name="settings_hide_projects_footer">Inicio no muestra tus proyectos, aquí y en Happy Desktop.</string>
+    <string name="settings_sign_out_title">¿Cerrar sesión?</string>
+    <string name="settings_disconnect_title">¿Desconectar el agente?</string>
+    <string name="settings_happy_account">Cuenta de Happy</string>
+    <string name="settings_backup_restore">Copia de seguridad y restauración</string>
+    <string name="settings_show_secret_key">Mostrar clave secreta</string>
+    <string name="settings_hide_secret_key">Ocultar clave secreta</string>
+    <string name="settings_copy_secret_key">Copiar clave secreta</string>
+    <string name="settings_link_device_footer">Escanea el código que otro teléfono muestra en Restaurar para iniciar sesión en esta cuenta.</string>
+    <string name="settings_restore_account">Restaurar una cuenta</string>
+    <string name="settings_restore_account_footer">Inicia sesión en otra cuenta con su clave secreta o con un teléfono que la tenga. Esta cuenta se queda aquí.</string>
+    <string name="settings_copy_id_footer">Toca un ID para copiarlo.</string>
+    <string name="settings_change_photo">Cambiar foto</string>
+    <string name="settings_remove_photo">Eliminar foto</string>
+    <string name="settings_could_not_save_profile">No se pudo guardar tu perfil</string>
+    <string name="settings_could_not_change_photo">No se pudo cambiar tu foto</string>
+    <string name="settings_could_not_remove_photo">No se pudo eliminar tu foto</string>
+</resources>

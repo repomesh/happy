@@ -1,5 +1,7 @@
 package com.slopus.happy.connection
 
+import androidx.annotation.StringRes
+import com.slopus.happy.R
 import com.slopus.happy.crypto.CanonicalBase64Url
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -10,15 +12,16 @@ import kotlinx.serialization.json.jsonObject
 
 /** Why pairing or a paired agent failed, in words the person can act on. */
 class AgentConnectionException(val reason: Reason) : Exception(reason.message) {
-    enum class Reason(val message: String) {
-        InvalidCode("This code is invalid. Generate a new one in Happy Agent."),
-        UpdateRequired("Update Happy to use this code."),
-        Expired("This code has expired. Generate a new one in Happy Agent."),
-        Rejected("The connection was rejected. Generate a new code and compare the emoji again."),
-        InvalidProof("The agent could not be verified. Generate a new code."),
-        InvalidResponse("The agent returned an invalid response."),
-        Unavailable("Could not reach the agent. Check its connection and try again."),
-        Revoked("This device is no longer authorized. Connect the agent again."),
+    /** [message] in English, for logs and tests; [text] what the person reads, in their language. */
+    enum class Reason(val message: String, @StringRes val text: Int) {
+        InvalidCode("This code is invalid. Generate a new one in Happy Agent.", R.string.pairing_error_invalid_code),
+        UpdateRequired("Update Happy to use this code.", R.string.pairing_error_update_required),
+        Expired("This code has expired. Generate a new one in Happy Agent.", R.string.pairing_error_expired),
+        Rejected("The connection was rejected. Generate a new code and compare the emoji again.", R.string.pairing_error_rejected),
+        InvalidProof("The agent could not be verified. Generate a new code.", R.string.pairing_error_invalid_proof),
+        InvalidResponse("The agent returned an invalid response.", R.string.pairing_error_invalid_response),
+        Unavailable("Could not reach the agent. Check its connection and try again.", R.string.pairing_error_unavailable),
+        Revoked("This device is no longer authorized. Connect the agent again.", R.string.pairing_error_revoked),
     }
 }
 

@@ -111,7 +111,7 @@ fun ConversationQuestionCard(
         val title = when {
             question.permissionFrom != null -> stringResource(R.string.conversation_permission_from, question.permissionFrom)
             question.isPermission -> stringResource(R.string.conversation_permission)
-            else -> stringResource(R.string.conversation_question)
+            else -> stringResource(R.string.agent_question_title)
         }
         Text(title, style = ConversationQuestionSpec.title, color = colors.textSecondary, modifier = Modifier.testTag(ConversationQuestionTags.TITLE))
         question.context?.let { context -> MarkdownView(remember(context) { parseMarkdown(context) }) }

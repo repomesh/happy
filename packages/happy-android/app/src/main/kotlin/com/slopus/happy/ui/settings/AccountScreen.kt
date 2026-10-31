@@ -151,7 +151,7 @@ fun AccountScreen(
                     Item(title = stringResource(R.string.settings_account_name), detail = displayName, showChevron = false, modifier = Modifier.revealRow(AccountTags.NAME))
                 }
                 if (username != null) {
-                    Item(title = stringResource(R.string.settings_username), detail = "@$username", showChevron = false, modifier = Modifier.revealRow(AccountTags.USERNAME))
+                    Item(title = stringResource(R.string.profile_username), detail = "@$username", showChevron = false, modifier = Modifier.revealRow(AccountTags.USERNAME))
                 }
                 val analyticsId = stringResource(R.string.settings_account_anonymous_id)
                 Item(
@@ -372,7 +372,7 @@ fun accountPageEntries(
         SettingsEntry(id = id, title = title, detail = detail, icon = icon, onClick = { open(id) }, page = true)
     return listOfNotNull(
         displayName?.let { row(AccountTags.NAME, stringResource(R.string.settings_account_name), it) },
-        username?.let { row(AccountTags.USERNAME, stringResource(R.string.settings_username), "@$it") },
+        username?.let { row(AccountTags.USERNAME, stringResource(R.string.profile_username), "@$it") },
         row(AccountTags.ANALYTICS_ID, stringResource(R.string.settings_account_anonymous_id), anonId ?: notAvailable),
         row(AccountTags.PUBLIC_ID, stringResource(R.string.settings_account_public_id), publicId ?: notAvailable),
         row(AccountTags.SERVER, stringResource(R.string.settings_account_server), server ?: stringResource(R.string.settings_default_server)),

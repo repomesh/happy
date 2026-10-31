@@ -72,7 +72,7 @@ private fun Details(agent: AgentInfo, mode: Mode?) {
         ItemGroup(title = stringResource(R.string.conversation_details_conversation)) {
             Item(stringResource(R.string.conversation_details_title), detail = agent.title?.ifBlank { null } ?: stringResource(R.string.conversation_untitled), showChevron = false)
             Item(
-                stringResource(R.string.conversation_details_status),
+                stringResource(R.string.settings_account_status),
                 detail = stringResource(if (agent.isWorking) R.string.conversation_status_working else R.string.conversation_status_idle),
                 showChevron = false,
             )
@@ -89,7 +89,7 @@ private fun Details(agent: AgentInfo, mode: Mode?) {
                 )
             }
             if (agent.isSubagent) Item(stringResource(R.string.conversation_details_parent), showChevron = false)
-            agent.createdAt?.let { Item(stringResource(R.string.conversation_details_created), detail = format.format(Date(it)), showChevron = false) }
+            agent.createdAt?.let { Item(stringResource(R.string.session_info_created), detail = format.format(Date(it)), showChevron = false) }
             agent.updatedAt?.let { Item(stringResource(R.string.conversation_details_updated), detail = format.format(Date(it)), showChevron = false) }
         }
         ItemGroup(title = stringResource(R.string.conversation_details_identifiers)) {
