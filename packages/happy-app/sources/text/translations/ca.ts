@@ -950,6 +950,7 @@ export const ca: TranslationStructure = {
         sending: 'Sending…',
         sendFailed: ({ reason }: { reason: string }) => `No enviat: ${reason}`,
         unknownTime: 'temps desconegut',
+        mediaPosition: ({ index, total }: { index: number; total: number }) => `${index} de ${total}`,
     },
 
     codex: {

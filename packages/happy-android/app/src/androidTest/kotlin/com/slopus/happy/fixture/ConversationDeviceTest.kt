@@ -205,20 +205,16 @@ class ConversationDeviceTest {
         capture("09-person-photo")
     }
 
-    @Test fun video_hands_off_to_another_app_and_back_returns_to_the_chat() {
+    /** A recording is a tile; tapped, it plays in the viewer's page, read a range at a time, and Back returns to the chat. */
+    @Test fun video_plays_in_the_viewer_and_back_returns_to_the_chat() {
         show()
-        rule.onAllNodesWithTag(ConversationRowTags.MEDIA_FILE, useUnmergedTree = true).fetchSemanticsNodes()
-            .let { log("media file rows: ${it.size}") }
-        rule.onNodeWithText("sample.mp4", substring = true, useUnmergedTree = true).performScrollTo().performClick()
-        val handler = otherAppInFront("video open")
-        capture("05-video-handler")
-        SystemClock.sleep(1_500)
+        rule.onNodeWithContentDescription("sample.mp4", useUnmergedTree = true).performScrollTo()
+        capture("05-video-tile")
+        rule.onNodeWithContentDescription("sample.mp4", useUnmergedTree = true).performClick()
+        rule.waitUntil(10_000) { rule.onAllNodesWithTag(PictureViewerTags.VIDEO, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        SystemClock.sleep(2_500)
         capture("06-video-playing")
-        // The handler's own rotation only; ours is not checked in this host.
-        device.setOrientationLeft()
-        capture("07-video-rotated-in-handler")
-        device.setOrientationNatural()
-        log("video handler was $handler")
+        assertTrue("video: the viewer is ours", device.currentPackageName == app.packageName)
         assertTrue("video back: never returned to the chat", backTo("video back", ::chatShowing) > 0)
         assertChatInFront("video back")
         capture("08-video-back")

@@ -1067,6 +1067,7 @@ export const en = {
         sending: 'Sending…',
         sendFailed: ({ reason }: { reason: string }) => `Not sent: ${reason}`,
         unknownTime: 'unknown time',
+        mediaPosition: ({ index, total }: { index: number; total: number }) => `${index} of ${total}`,
     },
 
     codex: {

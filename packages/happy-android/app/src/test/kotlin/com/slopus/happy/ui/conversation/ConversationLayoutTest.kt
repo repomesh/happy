@@ -1,6 +1,10 @@
 package com.slopus.happy.ui.conversation
 
 import android.graphics.Bitmap
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -412,10 +416,10 @@ class ConversationLayoutTest {
         shot("prefilled")
     }
 
-    @Test fun `a video is opened by tapping it, and says so when nothing reads it`() {
+    @Test fun `a video is a tile that opens the viewer`() {
         val ref = MediaRef("c3", 1, MediaItem("video", "repro.mp4", "video/mp4"))
         val opened = ArrayList<String>()
-        fun card(opening: MediaOpening?) = @Composable {
+        rule.setHappyContent {
             ConversationRowView(
                 ConversationRow.Media("m:0", listOf(ref)),
                 userMessageBubblePalette(null, false),
@@ -423,20 +427,21 @@ class ConversationLayoutTest {
                     legacy = MessageCallbacks(),
                     onRetryFailure = {},
                     loadMedia = { ByteArray(0) },
-                    onOpenMedia = { opened += it.key },
-                    mediaOpening = { opening },
+                    onOpenPicture = { opened += it },
+                    onOpenMedia = { error("a video is no file card") },
                 ),
             )
         }
-        rule.setHappyContent(content = card(null))
-        // No longer a desktop-only card: it is the thing you tap.
-        rule.onNodeWithText("Videos play in Happy Agent on your computer.").assertDoesNotExist()
-        rule.node(ConversationRowTags.MEDIA_FILE).performClick()
-        assertEquals(listOf("c3/1"), opened)
+        // No longer a file card handed to another app: a tile, played in the viewer.
+        rule.onNodeWithText("repro.mp4").assertDoesNotExist()
+        rule.node(ConversationRowTags.MEDIA_FILE).assertDoesNotExist()
+        rule.node(ConversationMediaTags.PLAY).assertIsDisplayed()
+        rule.node(ConversationMediaTags.TILE).performClick()
+        assertEquals(listOf("conversation/media/c3/1"), opened)
     }
 
-    @Test fun `a video nothing can read says so on its card`() {
-        val ref = MediaRef("c3", 1, MediaItem("video", "repro.mp4", "video/mp4"))
+    @Test fun `a file nothing can read says so on its card`() {
+        val ref = MediaRef("c3", 1, MediaItem("file", "repro.key", "application/x-iwork-keynote-sffkey"))
         rule.setHappyContent {
             ConversationRowView(
                 ConversationRow.Media("m:0", listOf(ref)),
@@ -452,6 +457,37 @@ class ConversationLayoutTest {
         }
         rule.onNodeWithText("Nothing on this phone opens this kind of file.").assertIsDisplayed()
         shot("media-no-app")
+    }
+
+    @Test fun `a person's six photos show four, and the viewer pages through all six`() {
+        val photos = listOf(android.graphics.Color.RED, android.graphics.Color.GREEN, android.graphics.Color.BLUE, android.graphics.Color.CYAN, android.graphics.Color.MAGENTA, android.graphics.Color.YELLOW).map { color ->
+            val png = java.io.ByteArrayOutputStream()
+                .also { Bitmap.createBitmap(120, 90, Bitmap.Config.ARGB_8888).apply { eraseColor(color) }.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                .toByteArray()
+            Block.Image("image/png", android.util.Base64.encodeToString(png, android.util.Base64.NO_WRAP))
+        }
+        show(ConversationState(created = true, loaded = true, rows = rows(Message("p6", "user", 1, listOf(Block.Text("The six screens")) + photos)), agent = agent))
+        assertEquals(4, rule.onAllNodes(hasTestTag(ConversationMediaTags.TILE), useUnmergedTree = true).fetchSemanticsNodes().size)
+        rule.onNodeWithText("+2", useUnmergedTree = true).assertIsDisplayed()
+        shot("pictures-user-six")
+        rule.node(ConversationMediaTags.MORE).performClick()
+        rule.waitForIdle()
+        fun inView(position: String) = rule.onNode(
+            hasTestTag(PictureViewerTags.IMAGE) and hasAnyAncestor(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, position)),
+            useUnmergedTree = true,
+        )
+        inView("4 of 6").assertExists()
+        rule.node(PictureViewerTags.VIEWER).performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        rule.node(PictureViewerTags.VIEWER).performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        // The sixth, which the row never showed, is the picture in view.
+        inView("6 of 6").assertExists()
+        rule.waitUntil(5_000) {
+            val viewer = rule.node(PictureViewerTags.VIEWER).captureToImage().asAndroidBitmap()
+            viewer.getPixel(viewer.width / 2, viewer.height / 2) == android.graphics.Color.YELLOW
+        }
+        shot("picture-viewer-sixth")
     }
 
     @Test fun `a picture in the transcript opens full screen and closes`() {

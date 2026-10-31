@@ -11,7 +11,9 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
@@ -192,6 +194,74 @@ class ConversationPicturesTest {
         assertDp("its own height", 600, tile.height)
         assertDp("its own width", 300, tile.width)
         assertWholeAndRounded(tile)
+    }
+
+    @Test fun `past four photos the fourth says how many more, and opens the viewer on itself`() {
+        val opened = ArrayList<String>()
+        val photos = Message("u4", "user", 1, List(6) { Block.Image("image/png", base64(png(400, 300))) })
+        show(400, 300, rows(photos), ConversationRowActions(legacy = MessageCallbacks(), onRetryFailure = {}, loadMedia = { ByteArray(0) }, onOpenPicture = { opened += it }))
+        val shown = tiles()
+        assertEquals("four of six", 4, shown.size)
+        // Two rows of two 4:3 photos in a bubble's width, flush right.
+        assertDp("first row's top", shown[0].top, shown[1].top)
+        assertDp("second row 8 under", shown[0].bottom + 8.dp, shown[2].top)
+        assertDp("flush right", 411 - 16, shown[3].right)
+        assertDp("one size", shown[2].width, shown[3].width)
+        assertDp("8 apart", shown[2].right + 8.dp, shown[3].left)
+        val more = rule.node(ConversationMediaTags.MORE).bounds()
+        assertEquals("over the fourth, whole", shown[3], more)
+        rule.onNodeWithText("+2", useUnmergedTree = true).assertExists()
+        shot("pictures-user-more")
+        rule.node(ConversationMediaTags.MORE).performClick()
+        assertEquals(listOf("conversation/u4:user:3"), opened)
+    }
+
+    @Test fun `four photos or fewer say nothing more`() {
+        show(400, 300, rows(Message("u5", "user", 1, List(4) { Block.Image("image/png", base64(png(400, 300))) })))
+        assertEquals(4, tiles().size)
+        rule.node(ConversationMediaTags.MORE).assertDoesNotExist()
+    }
+
+    @Test fun `a presented recording is a tile under the pictures, its first frame under a play circle and its length in a pill`() {
+        val frame = Bitmap.createBitmap(64, 36, Bitmap.Config.ARGB_8888).apply { eraseColor(green) }
+        val shown = Message(
+            "t3", "agent", 3,
+            listOf(
+                Block.ToolCall(
+                    "c3", "show_media", "completed",
+                    Presentation.Media(listOf(MediaItem("video", "clip.mp4", "video/mp4", 1280.0, 720.0), MediaItem("image", "a.png", "image/png", 1200.0, 800.0))),
+                ),
+            ),
+        )
+        val bytes = png(1200, 800)
+        show(
+            1200, 800, rows(shown),
+            ConversationRowActions(
+                legacy = MessageCallbacks(),
+                onRetryFailure = {},
+                loadMedia = { bytes },
+                loadVideo = { VideoPoster(frame, 1280f, 720f, 7.4) },
+            ),
+        )
+        rule.waitUntil(5_000) { rule.onAllNodesWithTag(ConversationMediaTags.DURATION, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        val (video, picture) = tiles()
+        assertDp("the picture first, from the left margin", 16, picture.left)
+        assertDp("the recording 8 under it", picture.bottom + 8.dp, video.top)
+        assertDp("16 in", 16, video.left)
+        // 1280 × 720 into 380 × 320 is 380 × 214; at the 379 measure, 379 × 213.
+        assertDp("width", 379, video.width)
+        assertDp("height", 213, video.height)
+        val play = rule.node(ConversationMediaTags.PLAY).bounds()
+        assertDp("a 48 circle", 48, play.width)
+        assertDp("in the middle", (video.left + video.right) / 2, (play.left + play.right) / 2)
+        val pill = rule.node(ConversationMediaTags.DURATION).bounds()
+        assertDp("pill 6 in from the left", video.left + 6.dp, pill.left)
+        assertDp("and from the bottom", video.bottom - 6.dp, pill.bottom)
+        assertDp("20 high", 20, pill.height)
+        rule.onNodeWithText("0:07", useUnmergedTree = true).assertExists()
+        // The first frame fills the tile under the circle.
+        assertEquals(green, pixel(video.left.value + 12, video.top.value + 12))
+        shot("pictures-tool-video")
     }
 
     @Test

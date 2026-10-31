@@ -132,7 +132,7 @@ open class ConversationApi(private val request: AgentRequest) {
 
     /** The bytes of one item a tool call presented (`media` presentation). */
     open suspend fun media(agentId: String, toolCallId: String, index: Int): ByteArray {
-        val response = request("GET", "/v0/agents/${escape(agentId)}/tool-calls/${escape(toolCallId)}/media/$index", null)
+        val response = request("GET", mediaPath(agentId, toolCallId, index), null)
         if (response.status !in 200..299) decode(response)
         return response.body
     }
@@ -189,6 +189,10 @@ open class ConversationApi(private val request: AgentRequest) {
         private const val ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
 
         fun escape(component: String): String = URLEncoder.encode(component, "UTF-8").replace("+", "%20")
+
+        /** One item a tool call presented; it answers a `Range` with that range (`206`). */
+        fun mediaPath(agentId: String, toolCallId: String, index: Int): String =
+            "/v0/agents/${escape(agentId)}/tool-calls/${escape(toolCallId)}/media/$index"
 
         /** A CUID2-shaped id the daemon accepts from a client (`^[a-z][a-z0-9]+$`, 24 long). */
         fun clientId(): String = buildString {

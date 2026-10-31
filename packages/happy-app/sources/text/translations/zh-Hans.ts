@@ -951,6 +951,7 @@ export const zhHans: TranslationStructure = {
         sending: 'Sending…',
         sendFailed: ({ reason }: { reason: string }) => `未发送：${reason}`,
         unknownTime: '未知时间',
+        mediaPosition: ({ index, total }: { index: number; total: number }) => `第 ${index} 项，共 ${total} 项`,
     },
 
     codex: {

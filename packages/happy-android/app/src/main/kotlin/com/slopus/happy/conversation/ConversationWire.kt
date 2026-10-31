@@ -60,6 +60,8 @@ data class MediaItem(
     val scale: Double? = null,
     /** The picture's ThumbHash, base64: its shape before the bytes come. */
     val thumbhash: String? = null,
+    /** Its length in bytes, when stated: a recording streams by range from it. */
+    val size: Double? = null,
 ) {
     val isVisual: Boolean get() = kind == "image" || kind == "video"
 
@@ -74,6 +76,7 @@ data class MediaItem(
                 height = o["height"].num,
                 scale = o["scale"].num,
                 thumbhash = o["thumbhash"].str,
+                size = o["size"].num,
             )
         }
     }

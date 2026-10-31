@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -36,8 +37,10 @@ import com.slopus.happy.chat.MessageMeta
 import com.slopus.happy.chat.ToolCall
 import com.slopus.happy.chat.ToolState
 import com.slopus.happy.chat.UserDisplay
+import com.slopus.happy.artifacts.formatDuration
 import com.slopus.happy.conversation.Block
 import com.slopus.happy.conversation.ConversationRow
+import com.slopus.happy.conversation.ConversationViewing
 import com.slopus.happy.conversation.Delivery
 import com.slopus.happy.conversation.MediaFlow
 import com.slopus.happy.conversation.MediaRef
@@ -95,9 +98,11 @@ class ConversationRowActions(
     val loadMedia: suspend (MediaRef) -> ByteArray,
     /** Opens an artifact; null where this build has no viewer, and its card says where it opens. */
     val onOpenArtifact: ((ConversationRow.Artifact) -> Unit)? = null,
-    /** Shows one picture full screen. */
-    val onOpenPicture: (bytes: ByteArray, cacheKey: String, name: String?) -> Unit = { _, _, _ -> },
-    /** Opens a presented video or file in whatever on the phone reads it. */
+    /** Opens the viewer on a picture or recording, by its key ([ConversationViewing]), paging through the conversation's. */
+    val onOpenPicture: (key: String) -> Unit = {},
+    /** A presented recording's first frame, size and length; null where none can be read. */
+    val loadVideo: suspend (MediaRef) -> VideoPoster? = { null },
+    /** Opens a presented file in whatever on the phone reads it. */
     val onOpenMedia: ((MediaRef) -> Unit)? = null,
     /** What that is doing: reading, or why it could not open. */
     val mediaOpening: (MediaRef) -> MediaOpening? = { null },
@@ -115,17 +120,20 @@ class ConversationRowActions(
  * sizes before the bytes come. A person's photos go 8 under their bubble
  * against the right edge, in at most the bubble's width (36 clear at the
  * left, never past 560): one alone up to 360 high, several justified up
- * to 280 high. An agent's, and what a tool presented, from the left edge
- * at the column's measure: one alone up to 640 high, never past its own
- * size; several justified up to 480 high, or in the 1 or 2 columns the
- * tool asked for. Media is read on demand; videos and files are a
- * surfaceHigh card (radius 12, padding 12) naming the file and saying
- * where it opens. Artifacts the same card, with the artifact's title.
- * Another agent's message: "From another agent" (13/18 semibold,
- * textSecondary) over its Markdown. A failure: a
- * surfaceHigh card with the reason in textDestructive and Retry (13/18
- * semibold, link colour) while it can help, "Retried" once acted on. A
- * notice: 13/18 textSecondary, centred.
+ * to 280 high; past four, the fourth reads "+N" (iOS shows four). An
+ * agent's, and what a tool presented, from the left edge at the column's
+ * measure: one alone up to 640 high, never past its own size; several
+ * justified up to 480 high, or in the 1 or 2 columns the tool asked for;
+ * recordings under them, each at its own box (at most 380 × 320, never
+ * enlarged), a first frame under a play circle and its length. A tap opens
+ * the viewer, which pages through every picture and recording of the
+ * conversation. Media is read on demand; files are a surfaceHigh card
+ * (radius 12, padding 12) naming the file and saying where it opens.
+ * Artifacts the same card, with the artifact's title. Another agent's
+ * message: "From another agent" (13/18 semibold, textSecondary) over its
+ * Markdown. A failure: a surfaceHigh card with the reason in
+ * textDestructive and Retry (13/18 semibold, link colour) while it can
+ * help, "Retried" once acted on. A notice: 13/18 textSecondary, centred.
  */
 @Composable
 fun ConversationRowView(row: ConversationRow, bubble: BubblePalette, actions: ConversationRowActions) {
@@ -208,7 +216,7 @@ private fun UserRow(row: ConversationRow.User, bubble: BubblePalette, actions: C
     }
     // The photos go under the words, against the right edge as the bubble is.
     val photos = @Composable {
-        InlinePictures(row.key, row.pictures, actions, MediaFlow.message, alignEnd = true, measure = MediaFlow::messageMeasure)
+        InlinePictures(row.key, row.pictures, actions, MediaFlow.message, alignEnd = true, measure = MediaFlow::messageMeasure, limit = true)
     }
     if (row.text.isNotEmpty() || failed != null) {
         UserMessage(
@@ -229,7 +237,12 @@ private fun UserRow(row: ConversationRow.User, bubble: BubblePalette, actions: C
     }
 }
 
-/** A message's own pictures, read from the bytes it carries: their shapes from their headers, before they decode. */
+/**
+ * A message's own pictures, read from the bytes it carries: their shapes
+ * from their headers, before they decode. A person's message shows its
+ * first four ([MediaFlow.MESSAGE_MAX], [limit]); the fourth says how many
+ * more there are, and the viewer pages through them all.
+ */
 @Composable
 private fun InlinePictures(
     key: String,
@@ -238,9 +251,12 @@ private fun InlinePictures(
     limits: MediaFlow.Limits,
     alignEnd: Boolean,
     measure: (Float) -> Float = { it },
+    limit: Boolean = false,
 ) {
-    val decoded = remember(key, pictures) {
-        pictures.map { picture ->
+    val shown = if (limit) MediaFlow.messageShown(pictures.size) else pictures.size
+    val more = if (limit) MediaFlow.messageMore(pictures.size) else 0
+    val decoded = remember(key, pictures, shown) {
+        pictures.take(shown).map { picture ->
             val bytes = try {
                 Base64.decode(picture.data, Base64.DEFAULT)
             } catch (_: IllegalArgumentException) {
@@ -251,20 +267,21 @@ private fun InlinePictures(
     }
     val label = stringResource(R.string.conversation_picture)
     MediaFlowLayout(
-        images = decoded.map { it.second },
+        items = decoded.map { MediaFlow.Item(false, it.second) },
         limits = limits,
         alignEnd = alignEnd,
         measure = measure,
         modifier = Modifier.testTag(ConversationRowTags.PICTURE),
     ) { index ->
         val bytes = decoded[index].first
-        val cacheKey = "conversation/$key:$index"
+        val cacheKey = ConversationViewing.pictureKey(key, index)
         MediaTile(
             bytes = bytes,
             cacheKey = cacheKey,
             contentDescription = label,
             failed = bytes == null,
-            onClick = bytes?.let { { actions.onOpenPicture(it, cacheKey, null) } },
+            onClick = bytes?.let { { actions.onOpenPicture(cacheKey) } },
+            more = if (index == decoded.lastIndex) more else 0,
         )
     }
 }
@@ -293,50 +310,69 @@ private fun ReasoningRow(row: ConversationRow.Reasoning, modifier: Modifier) {
 
 @Composable
 private fun MediaRow(row: ConversationRow.Media, actions: ConversationRowActions, modifier: Modifier) {
-    val visual = row.items.filter { it.item.kind == "image" }
-    val other = row.items.filter { it.item.kind != "image" }
+    val visual = row.items.filter { it.item.isVisual }
+    val other = row.items.filter { !it.item.isVisual }
     Column(
         modifier.fillMaxWidth().padding(vertical = ConversationRowSpec.marginVertical).testTag(ConversationRowTags.MEDIA),
         verticalArrangement = Arrangement.spacedBy(MediaFlow.GAP.dp),
     ) {
         if (visual.isNotEmpty()) {
-            val loads = visual.map { ref -> key(ref.key) { rememberMediaBytes(ref, actions.loadMedia) } }
-            // As stated, else the hash's shape; a picture that stated no size takes its own once read.
-            val images = visual.mapIndexed { index, ref ->
+            val loads = visual.map { ref -> key(ref.key) { if (ref.item.kind == "video") null else rememberMediaBytes(ref, actions.loadMedia) } }
+            val posters = visual.map { ref -> key(ref.key) { if (ref.item.kind == "video") rememberVideoPoster(ref, actions.loadVideo) else null } }
+            // As stated, else the hash's shape; one that stated no size takes its own once read.
+            val items = visual.mapIndexed { index, ref ->
                 val stated = ref.item.flowImage()
-                val read = loads[index]?.getOrNull()
-                if (MediaFlow.pointSize(stated) == null && read?.size?.width != null) read.size else stated
+                val video = ref.item.kind == "video"
+                val read = if (video) posters[index]?.let { MediaFlow.Image(it.width, it.height) } else loads[index]?.getOrNull()?.size
+                MediaFlow.Item(video, if (MediaFlow.pointSize(stated) == null && read?.width != null) read else stated)
             }
             MediaFlowLayout(
-                images = images,
+                items = items,
                 columns = row.columns,
                 limits = MediaFlow.tool,
                 modifier = Modifier.padding(horizontal = ConversationRowSpec.marginHorizontal),
             ) { index ->
                 val ref = visual[index]
-                val load = loads[index]
-                val bytes = load?.getOrNull()?.bytes
-                val cacheKey = "conversation/media/${ref.key}"
-                MediaTile(
-                    bytes = bytes,
-                    cacheKey = cacheKey,
-                    contentDescription = ref.item.name.ifEmpty { stringResource(R.string.conversation_picture) },
-                    failed = load?.isFailure == true,
-                    onClick = bytes?.let { { actions.onOpenPicture(it, cacheKey, ref.item.name) } },
-                    placeholder = rememberThumbHash(ref.item.thumbhash),
-                )
+                val key = ConversationViewing.presentedKey(ref)
+                val thumbhash = rememberThumbHash(ref.item.thumbhash)
+                if (ref.item.kind == "video") {
+                    val poster = posters[index]
+                    val frame = poster?.frame
+                    val still = remember(frame) { frame?.asImageBitmap() }
+                    MediaTile(
+                        bytes = null,
+                        cacheKey = key,
+                        contentDescription = ref.item.name.ifEmpty { stringResource(R.string.artifact_video) },
+                        failed = false,
+                        onClick = { actions.onOpenPicture(key) },
+                        placeholder = still ?: thumbhash,
+                        video = true,
+                        duration = poster?.seconds?.let(::formatDuration),
+                    )
+                } else {
+                    val load = loads[index]
+                    val bytes = load?.getOrNull()?.bytes
+                    MediaTile(
+                        bytes = bytes,
+                        cacheKey = key,
+                        contentDescription = ref.item.name.ifEmpty { stringResource(R.string.conversation_picture) },
+                        failed = load?.isFailure == true,
+                        onClick = bytes?.let { { actions.onOpenPicture(key) } },
+                        placeholder = thumbhash,
+                    )
+                }
             }
         }
         other.forEach { ref ->
             val opening = actions.mediaOpening(ref)
             val open = actions.onOpenMedia
             InfoCard(
-                icon = if (ref.item.kind == "video") Ionicon.PlayCircleOutline else Ionicon.DocumentTextOutline,
+                icon = Ionicon.DocumentTextOutline,
                 title = ref.item.name,
                 detail = when {
                     opening is MediaOpening.Failed -> opening.reason
                     opening is MediaOpening.Reading -> stringResource(R.string.conversation_media_reading)
-                    open == null -> stringResource(if (ref.item.kind == "video") R.string.conversation_video_unavailable else R.string.conversation_file_unavailable)
+                    open == null -> stringResource(R.string.conversation_file_unavailable)
                     else -> null
                 },
                 onClick = open?.let { { it(ref) } },
@@ -345,6 +381,21 @@ private fun MediaRow(row: ConversationRow.Media, actions: ConversationRowActions
             )
         }
     }
+}
+
+/** A presented recording's first frame and length, read once per item while it is shown; null until they come or when they can't. */
+@Composable
+private fun rememberVideoPoster(ref: MediaRef, load: suspend (MediaRef) -> VideoPoster?): VideoPoster? {
+    val poster by produceState<VideoPoster?>(null, ref.key) {
+        value = try {
+            load(ref)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+    return poster
 }
 
 /** A presented picture's bytes and the size its header gives. */

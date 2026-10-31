@@ -49,9 +49,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.slopus.happy.R
+import com.slopus.happy.connection.TransportResponse
 import com.slopus.happy.conversation.Activity
 import com.slopus.happy.conversation.ConversationRow
 import com.slopus.happy.conversation.ConversationState
+import com.slopus.happy.conversation.ConversationViewing
 import com.slopus.happy.conversation.MediaRef
 import com.slopus.happy.conversation.Mode
 import com.slopus.happy.ui.chat.MessageCallbacks
@@ -130,6 +132,8 @@ class ConversationScreenActions(
     /** History could not be read: ask again. */
     val onRetryLoad: () -> Unit = {},
     val loadMedia: suspend (MediaRef) -> ByteArray = { throw IllegalStateException() },
+    /** One byte range of a presented item, so a recording streams; null where ranges can't be asked for. */
+    val loadMediaRange: (suspend (MediaRef, LongRange) -> TransportResponse)? = null,
     val onOpenArtifact: ((com.slopus.happy.conversation.ConversationRow.Artifact) -> Unit)? = null,
     /** The newest message is on screen while the app is up: unread clears. */
     val onVisible: (Boolean) -> Unit = {},
@@ -181,13 +185,19 @@ fun ConversationScreen(
     }
     val pictures = rememberPictureViewer()
     val media = rememberMediaOpener()
-    val rowActions = remember(actions, legacy, pictures, media) {
+    val store = rememberConversationMediaStore(actions.loadMedia, actions.loadMediaRange)
+    // The viewer pages through what the transcript holds when it opens.
+    val rows by rememberUpdatedState(state.rows)
+    val pictureLabel = stringResource(R.string.conversation_picture)
+    val videoLabel = stringResource(R.string.artifact_video)
+    val rowActions = remember(actions, legacy, pictures, media, store, pictureLabel, videoLabel) {
         ConversationRowActions(
             legacy = legacy,
             onRetryFailure = actions.onRetryFailure,
-            loadMedia = actions.loadMedia,
+            loadMedia = store::bytes,
             onOpenArtifact = actions.onOpenArtifact,
-            onOpenPicture = pictures::show,
+            onOpenPicture = { key -> pictures.show(ConversationViewing.entries(rows, pictureLabel, videoLabel), key) },
+            loadVideo = store::poster,
             onOpenMedia = { ref -> media.open(ref.key, ref.item) { actions.loadMedia(ref) } },
             mediaOpening = { ref -> media.state(ref.key) },
         )
@@ -375,7 +385,7 @@ fun ConversationScreen(
                     )
                 }
             }
-            PictureViewerHost(pictures)
+            PictureViewerHost(pictures, store)
         }
     }
 }

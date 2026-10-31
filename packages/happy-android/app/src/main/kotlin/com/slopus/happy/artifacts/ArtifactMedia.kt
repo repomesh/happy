@@ -3,7 +3,6 @@ package com.slopus.happy.artifacts
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaDataSource
-import android.media.MediaMetadataRetriever
 import android.util.Base64
 import android.util.LruCache
 import androidx.compose.runtime.Immutable
@@ -128,45 +127,16 @@ class ArtifactMedia(
 
     private suspend fun videoInfo(key: String): Pair<Extent?, Double?>? {
         val source = videoSource(key) ?: return null
-        val info = withContext(Dispatchers.IO) {
-            val retriever = MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(source)
-                val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toDoubleOrNull()
-                val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toDoubleOrNull()
-                val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-                val millis = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toDoubleOrNull()
-                val size = if (width != null && height != null && width > 0 && height > 0) {
-                    if (rotation % 180 != 0) Extent(height, width) else Extent(width, height)
-                } else null
-                size to millis?.div(1000)?.takeIf { it.isFinite() && it > 0 }
-            } catch (_: Exception) {
-                null
-            } finally {
-                runCatching { retriever.release() }
-            }
-        } ?: return null
-        info.first?.let { sizes[key] = it }
-        info.second?.let { durations[key] = it }
-        return info
+        val info = withContext(Dispatchers.IO) { VideoProbe.read(source) } ?: return null
+        info.size?.let { sizes[key] = it }
+        info.seconds?.let { durations[key] = it }
+        return info.size to info.seconds
     }
 
     /** A recording's first frame, no larger than [maxPixels] on its long side. */
     suspend fun poster(key: String, maxPixels: Int): Bitmap? {
         val source = videoSource(key) ?: return null
-        return withContext(Dispatchers.IO) {
-            val retriever = MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(source)
-                val frame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return@withContext null
-                val scale = minOf(1.0, maxPixels.toDouble() / maxOf(frame.width, frame.height))
-                if (scale >= 1.0) frame else Bitmap.createScaledBitmap(frame, (frame.width * scale).toInt().coerceAtLeast(1), (frame.height * scale).toInt().coerceAtLeast(1), true)
-            } catch (_: Exception) {
-                null
-            } finally {
-                runCatching { retriever.release() }
-            }
-        }
+        return withContext(Dispatchers.IO) { VideoProbe.read(source, maxPixels)?.poster }
     }
 
     /** A recording's bytes as the platform's player and retriever read them: a range at a time. */
@@ -260,7 +230,11 @@ class RangedSource(
     @Volatile private var known: Long = length.takeIf { it > 0 } ?: -1
     @Volatile private var closed = false
 
-    override fun getSize(): Long = known
+    /** Not stated, the length comes from the first range's answer, read here: a player asks before it reads. */
+    override fun getSize(): Long {
+        if (known < 0 && !closed) readAt(0, ByteArray(1), 0, 1)
+        return known
+    }
 
     override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
         if (closed || size <= 0) return if (size == 0) 0 else -1

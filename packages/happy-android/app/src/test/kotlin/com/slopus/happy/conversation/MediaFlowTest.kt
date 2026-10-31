@@ -142,4 +142,60 @@ class MediaFlowTest {
         assertEquals(0, parse("""{"type":"media","layout":{"type":"columns","columns":3},"items":[]}""").columns)
         assertEquals(0, parse("""{"type":"media","items":[]}""").columns)
     }
+
+    @Test fun `a message shows four of its photos and counts the rest`() {
+        // iOS's `messageMax`: the row takes the first four; the viewer pages through the rest.
+        assertEquals(4, MediaFlow.MESSAGE_MAX)
+        assertEquals(listOf(0, 1, 2, 3, 4, 4, 4), listOf(0, 1, 2, 3, 4, 5, 9).map(MediaFlow::messageShown))
+        assertEquals(listOf(0, 0, 0, 0, 0, 1, 5), listOf(0, 1, 2, 3, 4, 5, 9).map(MediaFlow::messageMore))
+        assertEquals(0, MediaFlow.messageShown(-1))
+    }
+
+    @Test fun `four photos of six lay out as four, in two justified rows of a bubble's width`() {
+        val six = List(6) { image(1200f, 900f) }
+        val shown = six.take(MediaFlow.messageShown(six.size))
+        val layout = MediaFlow.layout(shown, 338f, limits = MediaFlow.message, alignEnd = true)
+        assertEquals(4, layout.frames.size)
+        // 4:3 photos at 720 cut into two rows of two, each 338 wide together.
+        near(layout.frames[0].y, layout.frames[1].y, "first row shares its top")
+        near(layout.frames[2].y, layout.frames[0].bottom + 8, "second row under it")
+        near(layout.frames[1].right, 338f, "flush right")
+        near(layout.frames[3].right, 338f, "flush right")
+        near(layout.frames[0].width, (338f - 8) / 2, "half the measure each")
+        // The same four as the first four of six: what is cut never moves what stays.
+        assertEquals(MediaFlow.layout(six.take(4), 338f, limits = MediaFlow.message, alignEnd = true), layout)
+    }
+
+    @Test fun `a recording's box is its own size into 380 by 320, never enlarged`() {
+        assertEquals(380f to 214f, MediaFlow.videoBox(null, null))
+        assertEquals(320f to 180f, MediaFlow.videoBox(320f, 180f))
+        assertEquals(380f to 214f, MediaFlow.videoBox(1920f, 1080f))
+        // Portrait: 320 high, as wide as its shape gives, at least 240.
+        assertEquals(240f to 320f, MediaFlow.videoBox(1080f, 1920f))
+        assertEquals(320f to 320f, MediaFlow.videoBox(1000f, 1000f))
+    }
+
+    @Test fun `pictures flow first and each recording follows at its own box`() {
+        val items = listOf(
+            MediaFlow.Item(true, image(1920f, 1080f)),
+            MediaFlow.Item(false, image(300f, 200f)),
+            MediaFlow.Item(true, MediaFlow.Image()),
+        )
+        val layout = MediaFlow.mediaLayout(items, 379f)
+        assertEquals(MediaFlow.Frame(0f, 0f, 300f, 200f), layout.frames[1])
+        assertEquals(MediaFlow.Frame(0f, 208f, 379f, 213f), layout.frames[0])
+        assertEquals(MediaFlow.Frame(0f, 429f, 379f, 213f), layout.frames[2])
+        near(layout.height, 642f, "one under another, 8 apart")
+        near(layout.width, 379f, "the widest")
+
+        // A person's are pushed to the right edge.
+        val sent = MediaFlow.mediaLayout(listOf(MediaFlow.Item(true, image(320f, 180f))), 338f, alignEnd = true)
+        assertEquals(MediaFlow.Frame(18f, 0f, 320f, 180f), sent.frames.single())
+    }
+
+    @Test fun `a presented item says its length in bytes`() {
+        val item = MediaItem.parse(Json.parseToJsonElement("""{"kind":"video","name":"a.mp4","mimeType":"video/mp4","size":28560,"width":1280,"height":720}"""))!!
+        assertEquals(28560.0, item.size)
+        assertEquals(null, MediaItem.parse(Json.parseToJsonElement("""{"kind":"video","name":"a.mp4","mimeType":"video/mp4"}"""))!!.size)
+    }
 }

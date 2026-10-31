@@ -36,7 +36,6 @@
     <string name="conversation_artifact">Artifact</string>
     <string name="conversation_artifact_unavailable">Open it in Happy Agent on your computer.</string>
     <string name="conversation_file_unavailable">Files open in Happy Agent on your computer.</string>
-    <string name="conversation_video_unavailable">Videos play in Happy Agent on your computer.</string>
     <string name="conversation_picture">Picture</string>
     <string name="conversation_picture_failed">Couldn\'t load this picture.</string>
     <string name="conversation_question">Question</string>

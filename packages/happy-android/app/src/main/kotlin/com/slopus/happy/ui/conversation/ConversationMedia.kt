@@ -6,13 +6,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import com.slopus.happy.ui.components.MaterialSymbols
+import com.slopus.happy.ui.theme.happyTextStyle
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
@@ -35,16 +46,29 @@ object ConversationMediaSpec {
     val radius = 8.dp
     val outline = 1.dp
     val failedIcon = 20.dp
+    val playIcon = 22.dp
+    val badgeInset = 6.dp
+    val badgeHeight = 20.dp
+    val badgePadding = 6.dp
+    val badge = happyTextStyle(fontSize = 12, lineHeight = 16, weight = FontWeight.SemiBold)
+    val more = happyTextStyle(fontSize = 22, lineHeight = 28, weight = FontWeight.SemiBold)
+    val moreScrim = Color(0x73000000)
 }
 
 object ConversationMediaTags {
-    /** Every picture tile; the flow they sit in is [FLOW]. */
+    /** Every picture and recording tile; the flow they sit in is [FLOW]. */
     const val TILE = "conversation.media.tile"
     const val FLOW = "conversation.media.flow"
+    /** A recording's play circle and its length. */
+    const val PLAY = "conversation.media.play"
+    const val DURATION = "conversation.media.duration"
+    /** The "+N" over the last of a message's photos shown. */
+    const val MORE = "conversation.media.more"
 }
 
 /**
- * Pictures shown together, as iOS lays a conversation's out ([MediaFlow]):
+ * Pictures shown together, as iOS lays a conversation's out ([MediaFlow]),
+ * recordings each at their own box under them ([MediaFlow.mediaLayout]):
  * planned from their shapes before any bytes arrive, then placed at the
  * width this is given. [measure] turns that width (dp) into the flow's own;
  * with [alignEnd] the flow is pushed against the right edge, the rest
@@ -57,7 +81,7 @@ object ConversationMediaTags {
  */
 @Composable
 fun MediaFlowLayout(
-    images: List<MediaFlow.Image>,
+    items: List<MediaFlow.Item>,
     modifier: Modifier = Modifier,
     columns: Int = 0,
     limits: MediaFlow.Limits = MediaFlow.tool,
@@ -66,12 +90,12 @@ fun MediaFlowLayout(
     tile: @Composable (index: Int) -> Unit,
 ) {
     Layout(
-        content = { images.indices.forEach { index -> key(index) { tile(index) } } },
+        content = { items.indices.forEach { index -> key(index) { tile(index) } } },
         modifier = modifier.testTag(ConversationMediaTags.FLOW),
     ) { measurables, constraints ->
         val available = if (constraints.hasBoundedWidth) constraints.maxWidth / density else FALLBACK_WIDTH
         val room = measure(available).coerceAtLeast(0f)
-        val flow = MediaFlow.layout(images, room, columns, limits, alignEnd)
+        val flow = MediaFlow.mediaLayout(items, room, columns, limits, alignEnd)
         val shift = if (alignEnd) available - room else 0f
         fun px(dp: Float) = (dp * density).roundToInt()
         val placeables = measurables.mapIndexed { index, measurable ->
@@ -98,8 +122,13 @@ private const val FALLBACK_WIDTH = 360f
  * One picture of a conversation's, as iOS's `ChatMediaView` draws it: the
  * picture whole in a tile of its own shape, on surfacePressed until it
  * lands, a 1 dp divider hairline over the whole tile and corners rounded
- * 8. [placeholder] (a thumbhash) shows until then. A picture that couldn't
- * be had keeps its ground under a quiet image glyph.
+ * 8. [placeholder] (a thumbhash, or a recording's first frame) shows until
+ * then. A picture that couldn't be had keeps its ground under a quiet image
+ * glyph. A recording ([video]) shows its first frame under a 48 play
+ * circle (a 22 glyph on the play fill), and its length ([duration]) in a
+ * pill 6 in from its bottom left (20 high, 6 either side of 12/16
+ * semibold), as the artifact gallery shows it. [more] photos not shown
+ * read "+N" (22/28 semibold, white) over a darkened tile.
  */
 @Composable
 fun MediaTile(
@@ -110,6 +139,9 @@ fun MediaTile(
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     placeholder: ImageBitmap? = null,
+    video: Boolean = false,
+    duration: String? = null,
+    more: Int = 0,
 ) {
     val colors = HappyTheme.colors
     val shape = RoundedCornerShape(ConversationMediaSpec.radius)
@@ -119,7 +151,8 @@ fun MediaTile(
             .clip(shape)
             .background(colors.surfacePressed)
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-            .border(ConversationMediaSpec.outline, colors.divider, shape),
+            .border(ConversationMediaSpec.outline, colors.divider, shape)
+            .then(if (video && contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         if (bytes != null && !failed) {
@@ -133,7 +166,35 @@ fun MediaTile(
                 modifier = Modifier.matchParentSize(),
             )
         } else if (placeholder != null && !failed) {
-            androidx.compose.foundation.Image(placeholder, null, Modifier.matchParentSize(), contentScale = ContentScale.FillBounds)
+            androidx.compose.foundation.Image(placeholder, null, Modifier.matchParentSize(), contentScale = if (video) ContentScale.Fit else ContentScale.FillBounds)
+        }
+        if (video) {
+            Box(
+                Modifier.size(MediaFlow.PLAY_SIZE.dp).clip(CircleShape).background(PlayFill).testTag(ConversationMediaTags.PLAY),
+                contentAlignment = Alignment.Center,
+            ) {
+                androidx.compose.material3.Icon(MaterialSymbols.PlayArrow, null, tint = PlayGlyph, modifier = Modifier.size(ConversationMediaSpec.playIcon))
+            }
+            if (duration != null) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(ConversationMediaSpec.badgeInset)
+                        .testTag(ConversationMediaTags.DURATION)
+                        .heightIn(min = ConversationMediaSpec.badgeHeight)
+                        .clip(RoundedCornerShape(ConversationMediaSpec.badgeHeight / 2))
+                        .background(PlayFill)
+                        .padding(horizontal = ConversationMediaSpec.badgePadding),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(duration, style = ConversationMediaSpec.badge, color = PlayGlyph, maxLines = 1)
+                }
+            }
+        }
+        if (more > 0) {
+            Box(Modifier.matchParentSize().background(ConversationMediaSpec.moreScrim).testTag(ConversationMediaTags.MORE), contentAlignment = Alignment.Center) {
+                Text("+$more", style = ConversationMediaSpec.more, color = Color.White, maxLines = 1)
+            }
         }
         if (failed) Icon(Ionicon.ImageOutline, ConversationMediaSpec.failedIcon, colors.textSecondary)
     }

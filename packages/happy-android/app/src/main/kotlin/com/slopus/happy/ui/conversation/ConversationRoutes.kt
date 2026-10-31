@@ -244,6 +244,14 @@ private fun ConversationEntry(graph: AppGraph, nav: NavHostController, route: Co
                     onOpenArtifact = { row -> nav.openArtifact(route.connectionId, row.ref) },
                     onRetryLoad = conversation::retryLoad,
                     loadMedia = conversation::media,
+                    // A recording streams a range at a time, as iOS's MediaStream asks.
+                    loadMediaRange = { ref, range ->
+                        session.client.send(
+                            "GET",
+                            ConversationApi.mediaPath(conversation.agentId, ref.toolCallId, ref.index),
+                            headers = mapOf("Range" to "bytes=${range.first}-${range.last}"),
+                        )
+                    },
                     onVisible = conversation::setVisible,
                     // The values typed into a secret go in this one request to the computer and nowhere else.
                     secrets = SecretRequestActions(

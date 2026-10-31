@@ -951,6 +951,7 @@ export const ja: TranslationStructure = {
         sending: 'Sending…',
         sendFailed: ({ reason }: { reason: string }) => `未送信: ${reason}`,
         unknownTime: '不明な時間',
+        mediaPosition: ({ index, total }: { index: number; total: number }) => `${total}件中${index}件目`,
     },
 
     codex: {

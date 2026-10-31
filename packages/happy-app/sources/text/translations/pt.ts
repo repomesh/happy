@@ -949,6 +949,7 @@ export const pt: TranslationStructure = {
         sending: 'Sending…',
         sendFailed: ({ reason }: { reason: string }) => `Não enviado: ${reason}`,
         unknownTime: 'horário desconhecido',
+        mediaPosition: ({ index, total }: { index: number; total: number }) => `${index} de ${total}`,
     },
 
     codex: {

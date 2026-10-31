@@ -950,6 +950,7 @@ export const zhHant: TranslationStructure = {
         sending: 'Sending…',
         sendFailed: ({ reason }: { reason: string }) => `未傳送：${reason}`,
         unknownTime: '未知時間',
+        mediaPosition: ({ index, total }: { index: number; total: number }) => `第 ${index} 項，共 ${total} 項`,
     },
 
     codex: {

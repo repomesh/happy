@@ -1,5 +1,6 @@
 package com.slopus.happy.conversation
 
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
@@ -46,6 +47,26 @@ object MediaFlow {
 
     /** A message's photos stay a bubble's width, not the transcript's. */
     const val MESSAGE_MAX_WIDTH = 560f
+
+    /**
+     * The most of a message's photos its row shows (iOS's `messageMax`);
+     * the viewer pages through the rest, and the last one shown says how
+     * many more there are.
+     */
+    const val MESSAGE_MAX = 4
+
+    /** How many of a message's [count] photos its row shows. */
+    fun messageShown(count: Int): Int = min(max(0, count), MESSAGE_MAX)
+
+    /** How many it doesn't: the "+N" over the last one shown. */
+    fun messageMore(count: Int): Int = max(0, count - MESSAGE_MAX)
+
+    /** A recording's play button, a circle in the middle of its tile. */
+    const val PLAY_SIZE = 48f
+    private const val VIDEO_MAX_WIDTH = 380f
+    private const val VIDEO_MAX_HEIGHT = 320f
+    private const val VIDEO_MIN_WIDTH = 240f
+    private const val VIDEO_FALLBACK_HEIGHT = 214f
 
     const val GAP = 8f
 
@@ -232,15 +253,62 @@ object MediaFlow {
     }
 
     /** Frames in the images' order, and the flow's size: the measure when aligned to the end, else what the tiles use. */
-    fun layout(images: List<Image>, measure: Float, columns: Int = 0, limits: Limits = tool, alignEnd: Boolean = false): Layout {
-        if (images.isEmpty() || measure <= 0f) return Layout(images.map { Frame(0f, 0f, 0f, 0f) }, 0f, 0f)
-        val geometry = geometry(plan(images, columns, limits), measure, alignEnd)
-        val frames = images.indices.map { geometry.frames[it] ?: Frame(0f, 0f, 0f, 0f) }
-        val used = frames.maxOf { it.right }
-        return Layout(frames, if (alignEnd) measure else used, geometry.height)
-    }
+    fun layout(images: List<Image>, measure: Float, columns: Int = 0, limits: Limits = tool, alignEnd: Boolean = false): Layout =
+        mediaLayout(images.map { Item(false, it) }, measure, columns, limits, alignEnd)
 
     data class Layout(val frames: List<Frame>, val width: Float, val height: Float)
+
+    /** One item of a flow: a picture or a recording, and what is known of its shape. */
+    data class Item(val isVideo: Boolean, val image: Image)
+
+    /**
+     * The box a recording is drawn in, from its intrinsic size alone (iOS's
+     * `videoBox`): scaled down into 380 × 320, never up; 380 × 214 when none
+     * was stated. (width, height).
+     */
+    fun videoBox(width: Float?, height: Float?): Pair<Float, Float> {
+        if (width == null || height == null || width <= 0 || height <= 0) return VIDEO_MAX_WIDTH to VIDEO_FALLBACK_HEIGHT
+        val ratio = width / height
+        val boxWidth = min(width, VIDEO_MAX_WIDTH)
+        val boxHeight = boxWidth / ratio
+        if (boxHeight <= VIDEO_MAX_HEIGHT) return rounded(boxWidth) to rounded(boxHeight)
+        return rounded(min(max(VIDEO_MAX_HEIGHT * ratio, VIDEO_MIN_WIDTH), boxWidth)) to VIDEO_MAX_HEIGHT
+    }
+
+    /**
+     * Pictures and recordings shown together, as iOS's `MediaLayout`: every
+     * picture first, together, as one flow; then each recording at its own
+     * box ([videoBox]), no wider than [measure], against the right edge
+     * with [alignEnd]. Frames in the items' order, and the flow's size as
+     * [layout] gives it.
+     */
+    fun mediaLayout(items: List<Item>, measure: Float, columns: Int = 0, limits: Limits = tool, alignEnd: Boolean = false): Layout {
+        if (items.isEmpty() || measure <= 0f) return Layout(items.map { Frame(0f, 0f, 0f, 0f) }, 0f, 0f)
+        val frames = MutableList(items.size) { Frame(0f, 0f, 0f, 0f) }
+        val pictures = items.indices.filter { !items[it].isVideo }
+        var y = 0f
+        if (pictures.isNotEmpty()) {
+            val geometry = geometry(plan(pictures.map { items[it].image }, columns, limits), measure, alignEnd)
+            pictures.forEachIndexed { position, index -> geometry.frames[position]?.let { frames[index] = it } }
+            y = geometry.height
+        }
+        for (index in items.indices) {
+            if (!items[index].isVideo) continue
+            if (y > 0) y += GAP
+            var (width, height) = videoBox(items[index].image.width, items[index].image.height)
+            if (width > measure && width > 0) {
+                height = rounded(height * measure / width)
+                width = measure
+            }
+            frames[index] = Frame(if (alignEnd) measure - width else 0f, y, width, height)
+            y += height
+        }
+        val used = frames.maxOf { it.right }
+        return Layout(frames, if (alignEnd) measure else used, y)
+    }
+
+    /** Swift's `rounded()`: half away from zero (sizes here are never negative). */
+    private fun rounded(value: Float): Float = floor(value + 0.5f)
 
     /**
      * The room a person's photos are laid out in, from the room their

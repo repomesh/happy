@@ -771,6 +771,27 @@ Verify focus, recording and communication mode on a device after changes.
   and decrypts on demand through `AttachmentTransfers` (50-entry LRU of
   decrypted blobs, one download per ref).
 
+### Conversation media and the viewer
+
+An agent connection's conversation lays pictures out with
+`conversation/MediaFlow` (iOS's `MediaFlow` and `MediaLayout`): pictures
+flow together, recordings follow each at its own box (≤ 380 × 320, never
+enlarged), and a person's message shows at most four photos, the fourth
+reading "+N". A recording's tile is its first frame, or its thumbhash
+first, under a play circle with its length in a pill. The frame and length come from
+`artifacts/VideoProbe` over a `RangedSource` on the tool-call media route
+with `Range`, held per screen by `ConversationMediaStore`.
+
+One viewer, `ui/conversation/PictureViewer` (iOS's `PictureViewController`),
+serves the conversation and artifacts (`ArtifactViewer` is an adapter). It
+pages through every picture and recording of the conversation, oldest
+first (`ConversationViewing.entries`). A picture rests at its own size,
+fitted to the safe area and never enlarged (`PictureViewing.fitted`).
+Which gesture wins is `PictureViewing.decide`: zoomed pans, a whole picture
+pages across and is dragged away up or down. A recording plays in its page
+(`VideoPage`). The position reads "N of M" for TalkBack only, as iOS has it
+for VoiceOver (`message.mediaPosition` in happy-app's catalogs).
+
 ### Image loading
 
 One Coil 3 `ImageLoader` (`ui/components/RemoteImage.kt`) for every

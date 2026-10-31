@@ -948,6 +948,7 @@ export const it: TranslationStructure = {
         sending: 'Sending…',
         sendFailed: ({ reason }: { reason: string }) => `Non inviato: ${reason}`,
         unknownTime: 'ora sconosciuta',
+        mediaPosition: ({ index, total }: { index: number; total: number }) => `${index} di ${total}`,
     },
 
     codex: {

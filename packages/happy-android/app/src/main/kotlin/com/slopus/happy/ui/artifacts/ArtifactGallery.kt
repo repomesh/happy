@@ -50,6 +50,8 @@ import com.slopus.happy.text.pluralResource
 import com.slopus.happy.ui.components.MaterialSymbols
 import com.slopus.happy.ui.components.RemoteImage
 import com.slopus.happy.ui.theme.HappyTheme
+import com.slopus.happy.ui.conversation.PlayFill
+import com.slopus.happy.ui.conversation.PlayGlyph
 import com.slopus.happy.ui.theme.happyTextStyle
 
 object ArtifactGalleryTags {
@@ -126,10 +128,6 @@ fun ArtifactGallery(items: List<ArtifactMediaItem>, media: ArtifactMedia, onOpen
 }
 
 private fun Modifier.place(frame: Frame): Modifier = offset(frame.x.dp, frame.y.dp).size(frame.width.dp, frame.height.dp)
-
-/** The play button's circle and glyph, as the conversation's recordings show theirs. */
-internal val PlayFill = Color(0x8C000000)
-internal val PlayGlyph = Color.White
 
 /**
  * One picture or recording, drawn as soon as its bytes (or first frame) are
