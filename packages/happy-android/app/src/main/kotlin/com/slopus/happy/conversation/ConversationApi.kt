@@ -22,12 +22,28 @@ class ConversationApiException(val status: Int, val code: String?, override val 
 /** One request to the paired agent, answered whatever its status; the agent connection's client does the transport. */
 typealias AgentRequest = suspend (method: String, path: String, body: JsonElement?) -> TransportResponse
 
-/** The client-chosen ids of a task made on first send (`POST /v0/tasks`); the same ids again are the same task. */
+/**
+ * The client-chosen ids of new work made on first send (`POST /v0/tasks` or
+ * `/v0/bots`); the same ids again are the same task or bot.
+ */
 data class NewTask(val taskId: String, val workspaceId: String, val agentId: String, val mutationId: String) {
     companion object {
         fun make() = NewTask(ConversationApi.clientId(), ConversationApi.clientId(), ConversationApi.clientId(), ConversationApi.clientId())
     }
 }
+
+/** What new work is made as. */
+enum class WorkKind { Task, Bot }
+
+/**
+ * New work as chosen before its first send (iOS's `NewTask.Choice`): a task
+ * unless a bot was picked, and the name given, blank for the computer to
+ * name it from its first message.
+ */
+data class WorkChoice(val kind: WorkKind = WorkKind.Task, val name: String = "")
+
+/** New work left before its first message, as it was left: compose again opens it. */
+data class UnsentWork(val task: NewTask, val choice: WorkChoice, val draft: String)
 
 /**
  * The conversation routes of the Happy Agent API (API.md, "Agents",
@@ -39,17 +55,23 @@ open class ConversationApi(private val request: AgentRequest) {
 
     private suspend fun call(method: String, path: String, body: JsonElement? = null): JsonObject = decode(request(method, path, body))
 
-    /** A new chat: a task, its folder and its one agent, made together. Answers `{task, membership}`. */
-    open suspend fun createTask(task: NewTask): JsonObject = call(
-        "POST",
-        "/v0/tasks",
-        buildJsonObject {
+    /**
+     * A new chat: a task (`{task, membership}`) or a bot (`{bot}`), its folder
+     * and its one agent, made together under [task]'s ids, as desktop's
+     * `createTask` and `createBot` make them. A blank name is left out rather
+     * than sent, which the computer would refuse.
+     */
+    open suspend fun createWork(task: NewTask, choice: WorkChoice = WorkChoice()): JsonObject {
+        val owner = if (choice.kind == WorkKind.Bot) "bot" else "task"
+        val body = buildJsonObject {
             put("id", task.taskId)
             put("workspaceId", task.workspaceId)
             put("agentId", task.agentId)
             put("mutationId", task.mutationId)
-        },
-    ).takeIf { it["task"].obj != null } ?: throw invalid()
+            choice.name.trim().takeIf { it.isNotEmpty() }?.let { put("name", it) }
+        }
+        return call("POST", "/v0/${owner}s", body).takeIf { it[owner].obj != null } ?: throw invalid()
+    }
 
     /**
      * The agent of this computer's Chief of Staff: the active bot whose

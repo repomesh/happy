@@ -149,6 +149,8 @@ internal fun ConversationComposer(
     modifier: Modifier = Modifier,
     backdrop: GlassSource? = null,
     pictures: ImagePicker? = rememberComposerImages(enabled = true),
+    /** Raised to take the keyboard into the composer (Return in new work's name). */
+    focusAsks: Int = 0,
 ) {
     val colors = HappyTheme.colors
     var tooLarge by remember { mutableStateOf(false) }
@@ -169,6 +171,17 @@ internal fun ConversationComposer(
     fun openPicker(which: ModePicker) {
         menu = false
         picker = which
+    }
+
+    // New work's first message goes once the task or bot is made: only then does it take the
+    // words and pictures, the words unless edited since. Seen once, so a return never clears again.
+    var takenSeen by rememberSaveable { mutableIntStateOf(state.taken?.serial ?: 0) }
+    LaunchedEffect(state.taken?.serial) {
+        val taken = state.taken ?: return@LaunchedEffect
+        if (taken.serial <= takenSeen) return@LaunchedEffect
+        takenSeen = taken.serial
+        pictures?.clear()
+        if (text.trim() == taken.text) onSent()
     }
 
     val open = focused || text.isNotEmpty() || attached.isNotEmpty()
@@ -277,7 +290,7 @@ internal fun ConversationComposer(
                         ),
                         modifier = Modifier.size(ConversationComposerSpec.primary).testTag(ConversationComposerTags.PRIMARY),
                     ) {
-                        if (state.stopping) {
+                        if (state.stopping || state.newWork?.making == true) {
                             CircularProgressIndicator(Modifier.size(16.dp), color = colors.surface, strokeWidth = 2.dp)
                         } else {
                             Icon(
@@ -326,6 +339,11 @@ internal fun ConversationComposer(
         LaunchedEffect(state.composerFocus?.serial) {
             val ask = state.composerFocus ?: return@LaunchedEffect
             field = field.copy(selection = TextRange(ask.cursor.coerceIn(0, field.text.length)))
+            focus.requestFocus()
+            keyboard?.show()
+        }
+        LaunchedEffect(focusAsks) {
+            if (focusAsks == 0) return@LaunchedEffect
             focus.requestFocus()
             keyboard?.show()
         }

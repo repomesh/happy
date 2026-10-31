@@ -95,12 +95,12 @@ fun NavGraphBuilder.chatRoutes(
             onBack = { nav.popBackStack() },
             onInfo = onInfo,
             // An empty chat in this one's place, so Back still leads home.
-            onCompose = { nav.composeChat() },
-            onNewBot = { nav.newBotInstead() },
+            onCompose = { nav.composeChat(inPlace = true) },
             onToolPress = { sessionId, message -> nav.navigate(toolPressRoute(sessionId, message)) },
             onToolFilePress = { sessionId, message, file -> nav.navigate(MessageDetailRoute(sessionId, message.id, file = file)) },
             // A resume that comes back as another session, or another tab of the checkout, replaces this chat in place.
             onOpenSession = { shown, id -> if (id != shown) nav.navigate(SessionRoute(id)) { popUpTo<SessionRoute> { inclusive = true } } },
+            onComposeStarted = { id -> entry.savedStateHandle[COMPOSE_STARTED] = id },
         )
     }
 }
@@ -113,15 +113,17 @@ private fun ChatRoute(
     onBack: () -> Unit,
     onInfo: (sessionId: String) -> Unit,
     onCompose: () -> Unit,
-    onNewBot: () -> Unit,
     onToolPress: (sessionId: String, ChatMessage.ToolCallMessage) -> Unit,
     onToolFilePress: (sessionId: String, ChatMessage.ToolCallMessage, String) -> Unit,
     onOpenSession: (shown: String, sessionId: String) -> Unit,
+    /** A compose chat's first send started this session. */
+    onComposeStarted: (sessionId: String) -> Unit = {},
 ) {
     // A chat opened from a tab strip's `+` stands on its stand-in's id until the machine names it (Home's pending chats);
     // one compose opened, on its own id until its first send has started the session.
     val route = rememberPendingChatRoute(graph, routeId)
     val compose = rememberComposeChat(graph, routeId)
+    compose?.startedId?.let { started -> LaunchedEffect(started) { onComposeStarted(started) } }
     val sessionId = compose?.sessionId ?: route.sessionId
     val account by graph.account.collectAsStateWithLifecycle()
     val feed = remember(account) {
@@ -294,7 +296,7 @@ private fun ChatRoute(
         val chatSlots = if (compose != null && composing) {
             ChatScreenSlots(
                 headerSubtitle = compose.progress(),
-                pending = ChatPendingSlot(compose.session, focusComposer = true) { ComposeTarget(compose, onNewBot) },
+                pending = ChatPendingSlot(compose.session, focusComposer = true) { ComposeTarget(compose) },
             )
         } else {
             slots.chat

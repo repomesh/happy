@@ -1108,5 +1108,17 @@ export const zhHans: TranslationStructure = {
         friendRequestGeneric: '新的好友请求',
         friendAccepted: ({ name }: { name: string }) => `您现在与 ${name} 成为了好友`,
         friendAcceptedGeneric: '好友请求已接受',
-    }
+    },
+
+    // What new work will be, in the middle of its empty chat (the native apps' compose).
+    newWork: {
+        task: '任务',
+        bot: '机器人',
+        name: '名称（可选）',
+        taskNote: '如果不命名，任务会根据第一条消息自行命名。',
+        botNote: '机器人是一段长期持续的对话，拥有自己的文件夹。',
+        taskFailed: ({ reason }: { reason: string }) => `无法启动任务。${reason}你的文字和附件仍保留在这里。`,
+        botFailed: ({ reason }: { reason: string }) => `无法启动机器人。${reason}你的文字和附件仍保留在这里。`,
+    },
+
 } as const;

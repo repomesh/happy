@@ -158,7 +158,7 @@ fun TabletSidebar(
             },
             onNewInCheckout = { first ->
                 services.newSession(context.applicationContext).prepareCheckout(first?.machineId, first?.path, first?.homeDir)
-                navigation.onNewSession()
+                navigation.onCompose()
             },
         )
     }
@@ -230,7 +230,7 @@ fun TabletSidebarContent(
             // The shell hides the phone's home bar, so the account switcher lives here instead,
             // beside New session and in reach whatever the detail pane shows.
             AccountMenuButton(accounts, onSwitchAccount, inset = 0.dp)
-            NewSessionButton(host.navigation.onNewSession, Modifier.weight(1f))
+            NewSessionButton(host.navigation.onCompose, Modifier.weight(1f))
             if (state?.hasArchivedSessions == true) {
                 ArchiveButton(hidden = state.archiveHidden, onClick = { host.callbacks.onSetArchiveHidden(!state.archiveHidden) })
             }
@@ -245,7 +245,7 @@ fun TabletSidebarContent(
                 )
                 state.rows.isEmpty() -> EmptySessionsTablet(
                     machines = machines,
-                    onNewSession = host.navigation.onNewSession,
+                    onNewSession = host.navigation.onCompose,
                     onTroubleshoot = host.navigation.onTroubleshoot,
                     onLinkComputer = host.actions.onLinkComputer,
                 )

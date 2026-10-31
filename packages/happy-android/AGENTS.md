@@ -172,12 +172,20 @@ win:
   no route change (not happy-app's draft route then navigate). On a
   Happy account the empty chat is `SessionRoute("compose-chat:<uuid>")`
   (`ui/chat/ComposeChat.kt`, iOS's LegacyComposeStart): its composer
-  writes the account's new-session draft, a pill names the machine and
-  folder it will start on, and its first send starts the session with
-  that text and images; the screen then shows that session. A refused or
-  failed start says why and keeps the text; leaving before the computer
-  answers stops the start and the draft stays. A bot is made on the
-  new-session screen, reached from the pill's menu.
+  writes the account's new-session draft; centred between the bar and the
+  composer (`ui/chat/NewWorkPanel.kt`, iOS's NewWorkPanel/NewWorkLayout)
+  sit the computer (only with two or more) and the folder, each a menu,
+  the folders following the computer; its first send starts the session
+  with that text and images, and the screen then shows that session. A
+  refused or failed start says why and keeps the text; leaving before the
+  computer answers stops the start and the draft stays. On a tablet the
+  sidebar's New session opens the same chat in the detail pane. Legacy
+  compose makes sessions only; a legacy bot is made on the new-session
+  screen (`/new`). An agent connection's empty chat asks Task or Bot and an
+  optional name in the same place; its first send makes that kind under
+  that name (`POST /v0/tasks` or `/v0/bots`, once, the same ids on a
+  retry) and only then sends, so a refusal keeps the text and says why.
+  Left unsent, the next compose opens it as it was (`AgentSession.unsentWork`).
 - **Home cards:** the legacy home's rows sit in the agent home's inset
   cards (`HomeCardRow`: 16 in, radius 26, 24 between cards, hairlines
   inside). Day and section headings become gaps; a computer heads its

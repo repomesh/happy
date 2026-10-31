@@ -1058,4 +1058,12 @@
     <string name="feed_friend_request_generic">Nuova richiesta di amicizia</string>
     <string name="feed_friend_accepted">Ora sei amico di %1$s</string>
     <string name="feed_friend_accepted_generic">Richiesta di amicizia accettata</string>
+
+    <string name="new_work_task">Attività</string>
+    <string name="new_work_bot">Bot</string>
+    <string name="new_work_name">Nome (facoltativo)</string>
+    <string name="new_work_task_note">Un’attività prende il nome dal suo primo messaggio, a meno che tu non gliene dia uno.</string>
+    <string name="new_work_bot_note">Un bot è una conversazione duratura con una cartella tutta sua.</string>
+    <string name="new_work_task_failed">Impossibile avviare l’attività. %1$s Il testo e gli allegati sono ancora qui.</string>
+    <string name="new_work_bot_failed">Impossibile avviare il bot. %1$s Il testo e gli allegati sono ancora qui.</string>
 </resources>

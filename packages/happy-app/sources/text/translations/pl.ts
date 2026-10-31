@@ -1139,6 +1139,17 @@ export const pl: TranslationStructure = {
         friendAcceptedGeneric: 'Zaproszenie do znajomych zaakceptowane',
     },
 
+    // What new work will be, in the middle of its empty chat (the native apps' compose).
+    newWork: {
+        task: 'Zadanie',
+        bot: 'Bot',
+        name: 'Nazwa (opcjonalnie)',
+        taskNote: 'Zadanie nazwie się samo od pierwszej wiadomości, chyba że nadasz mu nazwę.',
+        botNote: 'Bot to jedna trwała rozmowa z własnym folderem.',
+        taskFailed: ({ reason }: { reason: string }) => `Nie udało się rozpocząć zadania. ${reason} Twój tekst i załączniki wciąż tu są.`,
+        botFailed: ({ reason }: { reason: string }) => `Nie udało się uruchomić bota. ${reason} Twój tekst i załączniki wciąż tu są.`,
+    },
+
 } as const;
 
 export type TranslationsPl = typeof pl;

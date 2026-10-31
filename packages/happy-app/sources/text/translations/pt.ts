@@ -1106,7 +1106,19 @@ export const pt: TranslationStructure = {
         friendRequestGeneric: 'Novo pedido de amizade',
         friendAccepted: ({ name }: { name: string }) => `Agora você é amigo de ${name}`,
         friendAcceptedGeneric: 'Pedido de amizade aceito',
-    }
+    },
+
+    // What new work will be, in the middle of its empty chat (the native apps' compose).
+    newWork: {
+        task: 'Tarefa',
+        bot: 'Bot',
+        name: 'Nome (opcional)',
+        taskNote: 'Uma tarefa ganha o nome da primeira mensagem, a menos que você dê um nome a ela.',
+        botNote: 'Um bot é uma conversa duradoura com uma pasta própria.',
+        taskFailed: ({ reason }: { reason: string }) => `Não foi possível iniciar a tarefa. ${reason} Seu texto e seus anexos continuam aqui.`,
+        botFailed: ({ reason }: { reason: string }) => `Não foi possível iniciar o bot. ${reason} Seu texto e seus anexos continuam aqui.`,
+    },
+
 } as const;
 
 export type TranslationsPt = typeof pt;

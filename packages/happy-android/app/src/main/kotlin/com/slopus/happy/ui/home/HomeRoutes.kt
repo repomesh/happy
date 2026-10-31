@@ -59,10 +59,10 @@ class HomeNavigation(
     val onOpenSession: (String) -> Unit,
     val onOpenMachine: (String) -> Unit,
     val onTroubleshoot: () -> Unit,
-    /** The new-session screen: the tablet's, and new/index.tsx's link. */
+    /** The new-session screen (new/index.tsx), where `/new` leads. */
     val onNewSession: () -> Unit,
     val onDetails: (String) -> Unit,
-    /** The phone's compose: an empty chat whose first send starts the session. */
+    /** Compose: an empty chat whose first send starts the session, on the phone and in the tablet's detail pane. */
     val onCompose: () -> Unit = onNewSession,
 ) {
     companion object {

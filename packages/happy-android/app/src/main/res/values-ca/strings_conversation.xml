@@ -9,7 +9,6 @@
     <string name="conversation_revoked">Aquest dispositiu s\'ha eliminat</string>
     <string name="conversation_update_required">Cal actualitzar</string>
     <string name="conversation_unavailable">Aquesta connexió d\'agent no està disponible en aquest dispositiu.</string>
-    <string name="conversation_empty_new">Envia un missatge per començar una tasca nova.</string>
     <string name="conversation_empty">Encara no hi ha missatges.</string>
     <string name="conversation_read_only">Aquesta conversa la porta un altre agent i no admet missatges.</string>
     <string name="conversation_archived">Aquesta conversa està arxivada.</string>

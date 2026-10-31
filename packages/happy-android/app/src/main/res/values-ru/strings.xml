@@ -1077,4 +1077,12 @@
     <string name="feed_friend_request_generic">Новый запрос в друзья</string>
     <string name="feed_friend_accepted">Вы теперь друзья с %1$s</string>
     <string name="feed_friend_accepted_generic">Запрос в друзья принят</string>
+
+    <string name="new_work_task">Задача</string>
+    <string name="new_work_bot">Бот</string>
+    <string name="new_work_name">Название (необязательно)</string>
+    <string name="new_work_task_note">Задача назовёт себя по первому сообщению, если вы не дадите ей название.</string>
+    <string name="new_work_bot_note">Бот — это один долгий разговор со своей папкой.</string>
+    <string name="new_work_task_failed">Не удалось запустить задачу. %1$s Ваш текст и вложения на месте.</string>
+    <string name="new_work_bot_failed">Не удалось запустить бота. %1$s Ваш текст и вложения на месте.</string>
 </resources>

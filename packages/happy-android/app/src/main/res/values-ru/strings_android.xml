@@ -32,6 +32,5 @@
     <string name="scan_open_settings">Открыть настройки</string>
     <string name="scan_torch_on">Включить фонарик</string>
     <string name="scan_torch_off">Выключить фонарик</string>
-    <string name="compose_chat_new_bot">Новый бот…</string>
     <string name="state_animation_replay">Воспроизвести снова</string>
 </resources>

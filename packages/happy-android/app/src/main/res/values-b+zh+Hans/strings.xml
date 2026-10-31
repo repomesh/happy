@@ -1020,4 +1020,12 @@
     <string name="feed_friend_request_generic">新的好友请求</string>
     <string name="feed_friend_accepted">您现在与 %1$s 成为了好友</string>
     <string name="feed_friend_accepted_generic">好友请求已接受</string>
+
+    <string name="new_work_task">任务</string>
+    <string name="new_work_bot">机器人</string>
+    <string name="new_work_name">名称（可选）</string>
+    <string name="new_work_task_note">如果不命名，任务会根据第一条消息自行命名。</string>
+    <string name="new_work_bot_note">机器人是一段长期持续的对话，拥有自己的文件夹。</string>
+    <string name="new_work_task_failed">无法启动任务。%1$s你的文字和附件仍保留在这里。</string>
+    <string name="new_work_bot_failed">无法启动机器人。%1$s你的文字和附件仍保留在这里。</string>
 </resources>

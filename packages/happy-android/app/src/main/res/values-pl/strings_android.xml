@@ -32,6 +32,5 @@
     <string name="scan_open_settings">Otwórz ustawienia</string>
     <string name="scan_torch_on">Włącz latarkę</string>
     <string name="scan_torch_off">Wyłącz latarkę</string>
-    <string name="compose_chat_new_bot">Nowy bot…</string>
     <string name="state_animation_replay">Odtwórz ponownie</string>
 </resources>

@@ -1109,5 +1109,17 @@ export const ja: TranslationStructure = {
         friendRequestGeneric: '新しい友達リクエスト',
         friendAccepted: ({ name }: { name: string }) => `${name}さんと友達になりました`,
         friendAcceptedGeneric: '友達リクエストが承認されました',
-    }
+    },
+
+    // What new work will be, in the middle of its empty chat (the native apps' compose).
+    newWork: {
+        task: 'タスク',
+        bot: 'ボット',
+        name: '名前（任意）',
+        taskNote: '名前を付けなければ、タスクは最初のメッセージから名前が付きます。',
+        botNote: 'ボットは専用のフォルダーを持つ、ずっと続くひとつの会話です。',
+        taskFailed: ({ reason }: { reason: string }) => `タスクを開始できませんでした。${reason}テキストと添付ファイルはそのまま残っています。`,
+        botFailed: ({ reason }: { reason: string }) => `ボットを開始できませんでした。${reason}テキストと添付ファイルはそのまま残っています。`,
+    },
+
 } as const;

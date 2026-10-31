@@ -1020,4 +1020,12 @@
     <string name="feed_friend_request_generic">新的好友請求</string>
     <string name="feed_friend_accepted">您現在與 %1$s 成為了好友</string>
     <string name="feed_friend_accepted_generic">好友請求已接受</string>
+
+    <string name="new_work_task">任務</string>
+    <string name="new_work_bot">機器人</string>
+    <string name="new_work_name">名稱（選填）</string>
+    <string name="new_work_task_note">如果不命名，任務會根據第一則訊息自行命名。</string>
+    <string name="new_work_bot_note">機器人是一段長期持續的對話，擁有自己的資料夾。</string>
+    <string name="new_work_task_failed">無法啟動任務。%1$s你的文字和附件仍保留在這裡。</string>
+    <string name="new_work_bot_failed">無法啟動機器人。%1$s你的文字和附件仍保留在這裡。</string>
 </resources>

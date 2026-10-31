@@ -30,11 +30,15 @@ private class FakeAgent {
     var failOlder = false
     var sendStatus = 202
     var beforeBootstrap: suspend () -> Unit = {}
+    /** `POST /v0/tasks` and `/v0/bots` answer with this status and error instead. */
+    var refuseCreate: Int? = null
 
     val request: AgentRequest = { method, path, body ->
         requests += Triple(method, path, body as? JsonObject)
         val route = path.substringBefore('?')
         when {
+            (route == "/v0/tasks" || route == "/v0/bots") && refuseCreate != null -> TransportResponse(refuseCreate!!, body = """{"error":"Name already taken.","code":"conflict"}""".toByteArray())
+            route == "/v0/bots" -> ok("""{"bot":{"id":${(body as JsonObject)["id"]},"agent":{"id":"${body["agentId"]!!.toString().trim('"')}","workspaceId":"w","status":"idle"}}}""")
             route == "/v0/tasks" -> ok("""{"task":{"id":${(body as JsonObject)["id"]},"agent":{"id":"${(body as JsonObject)["agentId"]!!.toString().trim('"')}","workspaceId":"w","status":"idle"}},"membership":{}}""")
             route.endsWith("/bootstrap") -> { beforeBootstrap(); ok(bootstrap) }
             route.endsWith("/messages") && failOlder && "before=" in path -> TransportResponse(503, body = "{}".toByteArray())
@@ -75,13 +79,14 @@ class ConversationTest {
 
     @After fun cancel() = jobs.forEach { it.cancel() }
 
-    private fun TestScope.conversation(agent: FakeAgent, newTask: NewTask? = null, created: (JsonObject) -> Unit = {}) = Conversation(
+    private fun TestScope.conversation(agent: FakeAgent, newTask: NewTask? = null, choice: WorkChoice = WorkChoice(), created: (JsonObject) -> Unit = {}) = Conversation(
         api = ConversationApi(agent.request),
         signals = signals,
         // Not backgroundScope: advanceUntilIdle leaves its work alone. Cancelled after each test.
         scope = CoroutineScope(StandardTestDispatcher(testScheduler) + SupervisorJob().also { jobs += it }),
         agentId = newTask?.agentId ?: "a1",
         newTask = newTask,
+        initialChoice = choice,
         onTaskCreated = created,
         lane = StandardTestDispatcher(testScheduler),
         now = { 1000 },
@@ -275,6 +280,9 @@ class ConversationTest {
         advanceUntilIdle()
         assertFalse(chat.state.value.created)
         assertTrue(chat.state.value.loaded)
+        // A task unless a bot is picked, unnamed, and the keyboard up in the composer.
+        assertEquals(NewWork(WorkChoice(WorkKind.Task, "")), chat.state.value.newWork)
+        assertEquals(ComposerFocus(1, 0), chat.state.value.composerFocus)
         // Only the picker's models are read.
         assertEquals(listOf("/v0/config"), agent.paths("GET"))
         assertTrue(agent.paths("POST").isEmpty())
@@ -282,19 +290,106 @@ class ConversationTest {
         advanceUntilIdle()
         // Nothing is saved for an agent that doesn't exist yet.
         assertEquals(listOf("/v0/config"), agent.requests.map { it.second })
-        chat.send("First")
+        // The first send waits in the composer while the task is made, and a second meanwhile is dropped.
+        assertFalse(chat.send("First"))
+        assertFalse(chat.send("Dropped"))
+        advanceUntilIdle()
+        assertEquals("First", chat.state.value.taken?.text)
         chat.send("Second")
         advanceUntilIdle()
         assertEquals(1, agent.requests.count { it.second == "/v0/tasks" })
         val createBody = agent.requests.first { it.second == "/v0/tasks" }.third!!
         assertEquals("\"t1\"", createBody["id"].toString())
         assertEquals("\"a9\"", createBody["agentId"].toString())
+        // Unnamed: the computer names it from its first message.
+        assertFalse("name" in createBody)
+        assertNull(chat.state.value.newWork)
         assertEquals(listOf("/v0/agents/a9/send", "/v0/agents/a9/send"), agent.paths("POST").filter { it.endsWith("/send") })
         // The default model at its own effort, as nothing was picked.
         assertEquals("\"high\"", agent.requests.first { it.second.endsWith("/send") }.third!!["mode"]!!.jsonObject["effort"].toString())
         assertTrue(chat.state.value.created)
         assertEquals("t1", made!!["task"]!!.jsonObject["id"].toString().trim('"'))
         assertEquals(listOf("Second", "First"), chat.state.value.rows.map { (it as ConversationRow.User).text })
+    }
+
+    @Test fun `Bot and a name make a bot under that name, then the message goes into it`() = runTest {
+        val agent = FakeAgent()
+        var made: JsonObject? = null
+        val chat = conversation(agent, NewTask("t1", "w1", "a9", "m1")) { made = it }
+        advanceUntilIdle()
+        chat.setChoice(WorkChoice(WorkKind.Bot, "  Release Bot "))
+        advanceUntilIdle()
+        assertEquals(WorkChoice(WorkKind.Bot, "  Release Bot "), chat.state.value.newWork?.choice)
+        chat.send("Ship it")
+        advanceUntilIdle()
+        assertEquals(listOf("/v0/bots", "/v0/agents/a9/send"), agent.paths("POST").filter { it.startsWith("/v0/bots") || it.endsWith("/send") || it.startsWith("/v0/tasks") })
+        val body = agent.requests.first { it.second == "/v0/bots" }.third!!
+        assertEquals("\"Release Bot\"", body["name"].toString())
+        assertEquals("\"t1\"", body["id"].toString())
+        assertEquals("\"m1\"", body["mutationId"].toString())
+        assertEquals("t1", made!!["bot"]!!.jsonObject["id"].toString().trim('"'))
+        assertTrue(chat.state.value.created)
+        // Made: nothing here changes it now.
+        chat.setChoice(WorkChoice(WorkKind.Task, "Other"))
+        advanceUntilIdle()
+        assertNull(chat.state.value.newWork)
+        assertEquals(listOf("Ship it"), chat.state.value.rows.map { (it as ConversationRow.User).text })
+    }
+
+    @Test fun `a refused new work sends nothing, keeps the words, says why, and tries again under the same ids`() = runTest {
+        val agent = FakeAgent()
+        agent.refuseCreate = 409
+        val chat = conversation(agent, NewTask("t1", "w1", "a9", "m1"), WorkChoice(WorkKind.Bot, "Taken"))
+        advanceUntilIdle()
+        chat.setDraft("Hello")
+        assertFalse(chat.send("Hello"))
+        advanceUntilIdle()
+        assertEquals(WorkFailure(WorkKind.Bot, "Name already taken."), chat.state.value.workFailure)
+        assertFalse(chat.state.value.created)
+        assertTrue(chat.state.value.rows.isEmpty())
+        assertNull(chat.state.value.taken)
+        assertEquals("Hello", chat.state.value.draft)
+        // Unlocked again: the name can change, and the next send asks again with the same ids.
+        assertEquals(NewWork(WorkChoice(WorkKind.Bot, "Taken"), making = false), chat.state.value.newWork)
+        chat.dismissAlert()
+        chat.setChoice(WorkChoice(WorkKind.Bot, "Free"))
+        agent.refuseCreate = null
+        chat.send("Hello")
+        advanceUntilIdle()
+        assertNull(chat.state.value.workFailure)
+        val bodies = agent.requests.filter { it.second == "/v0/bots" }.map { it.third!! }
+        assertEquals(2, bodies.size)
+        assertEquals(bodies[0]["mutationId"], bodies[1]["mutationId"])
+        assertEquals("\"Free\"", bodies[1]["name"].toString())
+        assertTrue(chat.state.value.created)
+        assertEquals("Hello", chat.state.value.taken?.text)
+    }
+
+    @Test fun `while new work is being made its choice is fixed`() = runTest {
+        val agent = FakeAgent()
+        val gate = CompletableDeferred<Unit>()
+        val request = agent.request
+        val chat = Conversation(
+            api = ConversationApi { method, path, body -> if (path == "/v0/tasks") gate.await(); request(method, path, body) },
+            signals = signals,
+            scope = CoroutineScope(StandardTestDispatcher(testScheduler) + SupervisorJob().also { jobs += it }),
+            agentId = "a9",
+            newTask = NewTask("t1", "w1", "a9", "m1"),
+            lane = StandardTestDispatcher(testScheduler),
+            now = { 1000 },
+            retryDelayMillis = 1,
+        ).also { it.start() }
+        advanceUntilIdle()
+        chat.send("Go")
+        advanceUntilIdle()
+        assertEquals(true, chat.state.value.newWork?.making)
+        chat.setChoice(WorkChoice(WorkKind.Bot, "Late"))
+        advanceUntilIdle()
+        assertEquals(WorkChoice(), chat.state.value.newWork?.choice)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(chat.state.value.created)
+        assertEquals(0, agent.requests.count { it.second == "/v0/bots" })
     }
 
     @Test fun `a prefix goes above the agent's draft once, unsaved, with the cursor after it`() = runTest {

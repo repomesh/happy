@@ -29,6 +29,5 @@
     <string name="scan_open_settings">打开设置</string>
     <string name="scan_torch_on">打开手电筒</string>
     <string name="scan_torch_off">关闭手电筒</string>
-    <string name="compose_chat_new_bot">新建机器人…</string>
     <string name="state_animation_replay">再次播放</string>
 </resources>

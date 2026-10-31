@@ -130,11 +130,12 @@ class ConversationLayoutTest {
         rule.onNodeWithText("New chat").assertDoesNotExist()
     }
 
-    @Test fun `a new chat is empty with compose and overflow in the header`() {
-        show(ConversationState(created = false, loaded = true))
+    @Test fun `a new chat asks Task or Bot, with compose and overflow in the header`() {
+        show(ConversationState(created = false, loaded = true, newWork = com.slopus.happy.conversation.NewWork(com.slopus.happy.conversation.WorkChoice())))
         rule.node(ConversationScreenTags.TITLE).assertIsDisplayed()
         rule.onNodeWithText("New chat").assertIsDisplayed()
-        rule.node(ConversationScreenTags.EMPTY).assertIsDisplayed()
+        rule.node(com.slopus.happy.ui.chat.NewWorkTags.PANEL).assertIsDisplayed()
+        rule.node(ConversationScreenTags.EMPTY).assertDoesNotExist()
         rule.node(ConversationScreenTags.COMPOSE).assertIsDisplayed()
         rule.node(ConversationScreenTags.MORE).assertIsDisplayed()
         rule.node(ConversationScreenTags.DETAILS).assertDoesNotExist()

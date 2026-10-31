@@ -9,7 +9,6 @@
     <string name="conversation_revoked">このデバイスは削除されました</string>
     <string name="conversation_update_required">アップデートが必要です</string>
     <string name="conversation_unavailable">このエージェント接続はこのデバイスでは使えません。</string>
-    <string name="conversation_empty_new">メッセージを送ると新しいタスクが始まります。</string>
     <string name="conversation_empty">まだメッセージはありません。</string>
     <string name="conversation_read_only">この会話は別のエージェントが進めているため、メッセージを送れません。</string>
     <string name="conversation_archived">この会話はアーカイブされています。</string>

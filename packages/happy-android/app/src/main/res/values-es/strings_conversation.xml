@@ -9,7 +9,6 @@
     <string name="conversation_revoked">Este dispositivo se eliminó</string>
     <string name="conversation_update_required">Requiere actualización</string>
     <string name="conversation_unavailable">Esta conexión de agente no está disponible en este dispositivo.</string>
-    <string name="conversation_empty_new">Envía un mensaje para empezar una tarea nueva.</string>
     <string name="conversation_empty">Aún no hay mensajes.</string>
     <string name="conversation_read_only">Esta conversación la dirige otro agente y no admite mensajes.</string>
     <string name="conversation_archived">Esta conversación está archivada.</string>

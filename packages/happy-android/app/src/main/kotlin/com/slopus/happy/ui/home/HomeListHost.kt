@@ -50,9 +50,9 @@ class HomeListScope(
 
 /**
  * The home list's state, row callbacks, session menus and their alerts and
- * sheets, around [content]. On the [phone] home a project's "+" prepares a
- * new workspace of it and opens an empty chat on it (compose); in the tablet
- * sidebar it opens the new-session screen instead.
+ * sheets, around [content]. A project's "+" prepares a new workspace of it
+ * and opens an empty chat on it (compose), in the tablet's detail pane too.
+ * [phone]: the phone home, which alone asks for a review.
  */
 @Composable
 fun HomeListHost(graph: AppGraph, navigation: HomeNavigation, phone: Boolean = false, content: @Composable (HomeListScope) -> Unit) {
@@ -87,11 +87,11 @@ fun HomeListHost(graph: AppGraph, navigation: HomeNavigation, phone: Boolean = f
         showAlert = showAlert,
     )
     val context = LocalContext.current
-    // ProjectHomeList's "+": an empty chat (or the new-session screen) on a new workspace of that project.
-    val onCreateWorkspace = remember(services, context, phone, navigation) {
+    // ProjectHomeList's "+": an empty chat on a new workspace of that project, on the phone and in the tablet's detail.
+    val onCreateWorkspace = remember(services, context, navigation) {
         { origin: WorkspaceOrigin ->
             services.newSession(context.applicationContext).prepareWorkspace(origin.machineId, origin.projectId, origin.path)
-            if (phone) navigation.onCompose() else navigation.onNewSession()
+            navigation.onCompose()
         }
     }
     // SessionsList's requestReview(), once its list has sessions.

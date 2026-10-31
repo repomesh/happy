@@ -46,7 +46,6 @@
     <string name="scan_torch_off">Turn off flashlight</string>
 
     <!-- The compose chat's pill menu (ui/chat/ComposeChat.kt, iOS's LegacyComposeStart). -->
-    <string name="compose_chat_new_bot">New Bot…</string>
 
     <!-- State pictures (ui/components/StateAnimation.kt). -->
     <string name="state_animation_replay">Play again</string>

@@ -1058,4 +1058,12 @@
     <string name="feed_friend_request_generic">Nova sol·licitud d\'amistat</string>
     <string name="feed_friend_accepted">Ara ets amic de %1$s</string>
     <string name="feed_friend_accepted_generic">Sol·licitud d\'amistat acceptada</string>
+
+    <string name="new_work_task">Tasca</string>
+    <string name="new_work_bot">Bot</string>
+    <string name="new_work_name">Nom (opcional)</string>
+    <string name="new_work_task_note">Una tasca pren el nom del seu primer missatge, tret que n’hi posis un.</string>
+    <string name="new_work_bot_note">Un bot és una conversa duradora amb una carpeta pròpia.</string>
+    <string name="new_work_task_failed">No s’ha pogut iniciar la tasca. %1$s El teu text i els adjunts encara hi són.</string>
+    <string name="new_work_bot_failed">No s’ha pogut iniciar el bot. %1$s El teu text i els adjunts encara hi són.</string>
 </resources>

@@ -15,11 +15,11 @@ import com.slopus.happy.ui.HappyApp
 import com.slopus.happy.ui.PHONE
 import com.slopus.happy.ui.assertActionsLabelled
 import com.slopus.happy.ui.chat.ChatScreenTags
-import com.slopus.happy.ui.chat.ComposeChatTags
+import com.slopus.happy.ui.connect.DeepLinks
+import com.slopus.happy.ui.connect.parseDeepLink
 import com.slopus.happy.ui.home.BotFaceTags
 import com.slopus.happy.ui.home.FlatRowTags
 import com.slopus.happy.ui.home.HomeDockTags
-import com.slopus.happy.ui.home.HomeTags
 import com.slopus.happy.ui.node
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
@@ -39,10 +39,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Bots: on a Happy Agent that publishes `capabilities.bots` the compose
- * chat's target menu offers New Bot, the new-session screen with Bot
- * picked; a named bot with a picked face is created on
- * it. Its face upload fails, so "Picture not set" offers to try again on the
+ * Bots: on a Happy Agent that publishes `capabilities.bots` the
+ * new-session screen (`/new`; compose's empty chat makes sessions only, as
+ * iOS's does) offers Session | Bot; a named bot with a picked face is
+ * created on it. Its face upload fails, so "Picture not set" offers to try again on the
  * bot already made, which uploads the face and has the bot wear it, and the
  * bot's chat opens; no second bot is made.
  */
@@ -98,12 +98,10 @@ class BotJourneyTest {
         rule.setContent { HappyApp(graph) }
         rule.waitFor(FlatRowTags.ROW)
 
-        // Compose, then New Bot in the target menu: the new-session screen with Bot picked; named, wearing the third face.
-        rule.node(HomeTags.COMPOSE).performClick()
-        rule.waitFor(ComposeChatTags.TARGET)
-        rule.node(ComposeChatTags.TARGET).performClick()
-        rule.waitFor(ComposeChatTags.NEW_BOT)
-        rule.node(ComposeChatTags.NEW_BOT).performClick()
+        // `/new`, then Bot: named, wearing the third face.
+        DeepLinks.offer(parseDeepLink("happy://new")!!)
+        rule.waitFor(BotFaceTags.KIND)
+        rule.node(BotFaceTags.kind(true)).performClick()
         rule.waitFor(BotFaceTags.PICKER)
         rule.node(BotFaceTags.kind(true)).assertIsSelected()
         rule.node(BotFaceTags.face(2)).performClick()

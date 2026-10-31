@@ -40,6 +40,18 @@ sealed interface ConversationSignal {
 @Immutable
 data class ComposerFocus(val serial: Int, val cursor: Int)
 
+/** A new chat before its first send has made it: what it will be, and whether it is being made now. */
+@Immutable
+data class NewWork(val choice: WorkChoice, val making: Boolean = false)
+
+/** The composer's words and pictures went with the first message: [text] leaves the composer, unless edited since. */
+@Immutable
+data class ComposerTaken(val serial: Int, val text: String)
+
+/** New work that could not be made: nothing was sent, and the composer keeps everything. */
+@Immutable
+data class WorkFailure(val kind: WorkKind, val reason: String)
+
 /** Everything a conversation screen draws. [rows] are newest first. */
 @Immutable
 data class ConversationState(
@@ -74,6 +86,12 @@ data class ConversationState(
     val alert: String? = null,
     /** What home calls this conversation, so the screen has its name before the computer is asked. */
     val knownTitle: String? = null,
+    /** A new chat's Task or Bot and name; null once it is made. */
+    val newWork: NewWork? = null,
+    /** The first message took the composer's words and pictures. */
+    val taken: ComposerTaken? = null,
+    /** Why new work could not be made, shown once. */
+    val workFailure: WorkFailure? = null,
 ) {
     val title: String? get() = agent?.title?.takeIf { it.isNotBlank() } ?: knownTitle?.takeIf { it.isNotBlank() }
     /** As the agent says ([AgentInfo.sendable]): an internal subagent, driven by its parent, or an archived chat takes no messages. */
@@ -85,8 +103,10 @@ data class ConversationState(
  * history read by run, the connection's events applied on top, sends drawn
  * at once and delivered in order under their own ids, the draft kept with
  * the agent, and the open question. A new chat is [newTask]: nothing is read
- * until its first send makes the task, under the same [agentId], so the
- * screen becomes the real chat in place.
+ * until its first send makes it, a task or a bot as [setChoice] last said,
+ * under the same [agentId], so the screen becomes the real chat in place.
+ * That first send waits in the composer while the work is made; a refusal
+ * leaves it there ([ConversationState.workFailure]).
  *
  * All state lives on [lane], one coroutine at a time.
  */
@@ -100,7 +120,9 @@ class Conversation(
     initialDraft: String = "",
     /** [ConversationState.knownTitle]. */
     knownTitle: String? = null,
-    /** The answer to `POST /v0/tasks`, so home lists the task at once. */
+    /** A new chat's Task or Bot and name, as last left. */
+    initialChoice: WorkChoice = WorkChoice(),
+    /** The answer to `POST /v0/tasks` or `/v0/bots`, so home lists it at once. */
     private val onTaskCreated: (JsonObject) -> Unit = {},
     private val lane: CoroutineContext = Dispatchers.Default.limitedParallelism(1),
     private val now: () -> Long = System::currentTimeMillis,
@@ -110,7 +132,15 @@ class Conversation(
     private class Outgoing(val id: String, val text: String, val images: List<Block.Image>, var accepted: Boolean = false, var failure: String? = null)
 
     private val _state = MutableStateFlow(
-        ConversationState(created = newTask == null, loaded = newTask != null, draft = initialDraft, knownTitle = knownTitle),
+        ConversationState(
+            created = newTask == null,
+            loaded = newTask != null,
+            draft = initialDraft,
+            knownTitle = knownTitle,
+            newWork = newTask?.let { NewWork(initialChoice) },
+            // New work opens with the keyboard up, in its composer (iOS's focus with the push).
+            composerFocus = newTask?.let { ComposerFocus(1, initialDraft.length) },
+        ),
     )
     val state: StateFlow<ConversationState> = _state.asStateFlow()
 
@@ -134,6 +164,9 @@ class Conversation(
     private var reading: Job? = null
     private var pumping: Job? = null
     private var creating: Deferred<Unit>? = null
+    private var choice = initialChoice
+    /** The first send is making the new work: the choice is fixed and another send waits. */
+    private var making = false
     /** Events that came while history was read, applied after it. */
     private var held: MutableList<ConversationSignal.Event>? = null
 
@@ -384,12 +417,17 @@ class Conversation(
     // Sending
 
     /**
-     * Draws the message at once and delivers it, after making the task on a
-     * new chat's first send. False when there is nothing to send.
+     * Draws the message at once and delivers it. False when there is nothing
+     * to send, and on a new chat's first send, which waits in the composer
+     * while the task or bot is made ([startWork]).
      */
     fun send(text: String, images: List<Block.Image> = emptyList()): Boolean {
         val trimmed = text.trim()
         if (trimmed.isEmpty() && images.isEmpty()) return false
+        if (!created) {
+            startWork(trimmed) { images }
+            return false
+        }
         val id = ConversationApi.clientId()
         scope.launch(lane) {
             outgoing += Outgoing(id, trimmed, images)
@@ -408,6 +446,10 @@ class Conversation(
     fun send(text: String, files: List<File>, readPictures: (List<File>) -> List<Block.Image> = InlinePictures::read): Boolean {
         if (files.isEmpty()) return send(text)
         val trimmed = text.trim()
+        if (!created) {
+            startWork(trimmed) { readPictures(files) }
+            return false
+        }
         val id = ConversationApi.clientId()
         scope.launch(lane) {
             val images = try {
@@ -424,6 +466,51 @@ class Conversation(
             pump()
         }
         return true
+    }
+
+    /**
+     * A new chat's first send (iOS's NewTask): the task or bot is made as
+     * chosen, once, and only then does the message go, the composer giving
+     * up its words and pictures ([ConversationState.taken]). Until then they
+     * stay in the composer, and a refusal leaves them there and says why. A
+     * send while it is being made is dropped, as the button can't send then.
+     */
+    private fun startWork(text: String, pictures: () -> List<Block.Image>) {
+        scope.launch(lane) {
+            if (created || making) return@launch
+            val images = try {
+                pictures()
+            } catch (e: Exception) {
+                publish { it.copy(alert = "Couldn't read the pictures to send.") }
+                return@launch
+            }
+            val kind = choice.kind
+            making = true
+            publish()
+            try {
+                ensureCreated()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                making = false
+                publish { it.copy(workFailure = WorkFailure(kind, describe(e))) }
+                return@launch
+            }
+            making = false
+            outgoing += Outgoing(ConversationApi.clientId(), text, images)
+            setDraftNow("")
+            publish { it.copy(taken = ComposerTaken((it.taken?.serial ?: 0) + 1, text)) }
+            pump()
+        }
+    }
+
+    /** A new chat's Task or Bot and name, as picked; fixed once its first send is making it. */
+    fun setChoice(next: WorkChoice) {
+        scope.launch(lane) {
+            if (created || making || next == choice) return@launch
+            choice = next
+            publish()
+        }
     }
 
     /**
@@ -506,14 +593,14 @@ class Conversation(
         }
     }
 
-    /** The task a new chat lives in, made once: a retry repeats the same ids, which is the same task. */
+    /** The task or bot a new chat lives in, made once: a retry repeats the same ids, which is the same one. */
     private suspend fun ensureCreated() {
         val task = newTask ?: return
         val work = creating ?: scope.async(lane) {
-            val made = withRetries { api.createTask(task) }
+            val made = withRetries { api.createWork(task, choice) }
             newTask = null
             onTaskCreated(made)
-            made["task"].obj?.get("agent")?.let(AgentInfo::parse)?.let { agent = it }
+            (made["task"] ?: made["bot"]).obj?.get("agent")?.let(AgentInfo::parse)?.let { agent = it }
             publish { it.copy(created = true) }
             // Typed while it was made: that goes up now under the real agent.
             if (!draftSynced) saveDraftSoon(0)
@@ -643,7 +730,7 @@ class Conversation(
     }
 
     fun dismissAlert() {
-        scope.launch(lane) { publish { it.copy(alert = null) } }
+        scope.launch(lane) { publish { it.copy(alert = null, workFailure = null) } }
     }
 
     /** A tool's presented item, read whole. */
@@ -766,6 +853,7 @@ class Conversation(
         }
         return base.copy(
             created = created,
+            newWork = if (created) null else NewWork(choice, making),
             rows = rows.asReversed().toList(),
             agent = agent,
             mode = mode,

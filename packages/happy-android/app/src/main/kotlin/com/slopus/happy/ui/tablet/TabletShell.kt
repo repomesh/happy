@@ -41,7 +41,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.toRoute
 import com.slopus.happy.AppGraph
 import com.slopus.happy.R
+import com.slopus.happy.ui.chat.COMPOSE_STARTED
 import com.slopus.happy.ui.chat.SessionRoute
+import com.slopus.happy.ui.chat.isComposeChatId
 import com.slopus.happy.ui.components.Icon
 import com.slopus.happy.ui.components.Ionicon
 import com.slopus.happy.ui.files.MessageDetailRoute
@@ -56,6 +58,7 @@ import com.slopus.happy.ui.onboarding.OnboardingSettingsRoute
 import com.slopus.happy.ui.session.SessionInfoRoute
 import com.slopus.happy.ui.theme.HappyTheme
 import kotlin.math.floor
+import kotlinx.coroutines.flow.flowOf
 
 object TabletShellTags {
     const val DETAIL = "tablet.detail"
@@ -98,11 +101,13 @@ object TabletShellRule {
     /**
      * SessionsList.tsx `selectedSessionId`: the session under `/session/<id>/…`,
      * the chat and every screen under it (info, changes, a file, a message).
+     * A compose chat is the session its first send started ([composeStarted]),
+     * and nothing before.
      */
-    fun selectedSessionId(entry: NavBackStackEntry?): String? {
+    fun selectedSessionId(entry: NavBackStackEntry?, composeStarted: String? = null): String? {
         val destination = entry?.destination ?: return null
         return when {
-            destination.hasRoute<SessionRoute>() -> entry.toRoute<SessionRoute>().id
+            destination.hasRoute<SessionRoute>() -> entry.toRoute<SessionRoute>().id.let { if (isComposeChatId(it)) composeStarted else it }
             destination.hasRoute<SessionInfoRoute>() -> entry.toRoute<SessionInfoRoute>().id
             destination.hasRoute<SessionChangesRoute>() -> entry.toRoute<SessionChangesRoute>().id
             destination.hasRoute<SessionFileRoute>() -> entry.toRoute<SessionFileRoute>().id
@@ -146,6 +151,9 @@ fun TabletShell(
         val shows = TabletShellRule.showsShell(signedIn, window.isTablet, onboardingRoute)
         val local by graph.localSettings.values.collectAsStateWithLifecycle()
         val zen = local.zenMode
+        // The session a compose chat in the detail pane has started, so its row shows selected.
+        val composeStarted by remember(entry) { entry?.savedStateHandle?.getStateFlow<String?>(COMPOSE_STARTED, null) ?: flowOf(null) }
+            .collectAsStateWithLifecycle(null)
 
         Box(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxSize()) {
@@ -154,7 +162,7 @@ fun TabletShell(
                     TabletSidebar(
                         graph = graph,
                         navigation = navigation,
-                        selectedSessionId = TabletShellRule.selectedSessionId(entry),
+                        selectedSessionId = TabletShellRule.selectedSessionId(entry, composeStarted),
                         headerHeight = window.headerHeight,
                         modifier = Modifier.width(TabletShellSpec.sidebarWidth(window.width)).fillMaxHeight(),
                     )

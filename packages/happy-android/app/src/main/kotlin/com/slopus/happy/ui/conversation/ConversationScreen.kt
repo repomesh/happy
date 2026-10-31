@@ -56,6 +56,10 @@ import com.slopus.happy.conversation.ConversationState
 import com.slopus.happy.conversation.ConversationViewing
 import com.slopus.happy.conversation.MediaRef
 import com.slopus.happy.conversation.Mode
+import com.slopus.happy.conversation.NewWork
+import com.slopus.happy.conversation.WorkChoice
+import com.slopus.happy.ui.chat.NewWorkChoicePanel
+import com.slopus.happy.ui.chat.NewWorkRoom
 import com.slopus.happy.ui.chat.MessageCallbacks
 import com.slopus.happy.ui.chat.SessionStatusColors
 import com.slopus.happy.ui.chat.PrimaryAction
@@ -139,6 +143,8 @@ class ConversationScreenActions(
     val onVisible: (Boolean) -> Unit = {},
     /** How a secret request is made and answered; null where this build cannot. */
     val secrets: SecretRequestActions? = null,
+    /** A new chat's Task or Bot and name changed. */
+    val onChoiceChange: (WorkChoice) -> Unit = {},
 )
 
 /**
@@ -153,9 +159,10 @@ class ConversationScreenActions(
  * row a 32 slot: a spinner while a page loads; after a failed page
  * "Couldn't load earlier messages." and a Retry text button, and nothing
  * asks again until Retry. Away from the newest message, [ConversationJump]
- * leads back, its arrow shimmering while the agent works. Before history is read a spinner sits centred; a
- * new chat, an empty one and one that could not be read say so in
- * bodyLarge, 32 in.
+ * leads back, its arrow shimmering while the agent works. Before history is
+ * read a spinner sits centred; an empty chat and one that could not be read
+ * say so in bodyLarge, 32 in. A new chat asks what it will be in the middle
+ * instead ([NewWorkChoicePanel]).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -213,6 +220,8 @@ fun ConversationScreen(
     val blurs = rememberGlassBlur()
     var dock by remember { mutableIntStateOf(0) }
     val dockHeight = with(LocalDensity.current) { dock.toDp() }
+    // Return in new work's name: on to the composer.
+    var nameReturns by remember { mutableIntStateOf(0) }
     GlassBarLayout(
         modifier = modifier.testTag(ConversationScreenTags.SCREEN).fillMaxSize().background(colors.surface),
         ground = colors.surface,
@@ -323,14 +332,28 @@ fun ConversationScreen(
                         tag = ConversationScreenTags.ERROR,
                         modifier = Modifier.padding(top = top, bottom = dockHeight),
                     )
-                    TranscriptPhase.Empty -> StatePage(
-                        title = null,
-                        body = stringResource(if (state.created) R.string.conversation_empty else R.string.conversation_empty_new),
-                        art = StateArt.Ready,
-                        tag = ConversationScreenTags.EMPTY,
-                        modifier = Modifier.padding(top = top, bottom = dockHeight),
-                    )
+                    // New work is asked in the middle instead, and the chat it becomes is about to have its first message.
+                    TranscriptPhase.Empty -> if (state.created && state.taken == null) {
+                        StatePage(
+                            title = null,
+                            body = stringResource(R.string.conversation_empty),
+                            art = StateArt.Ready,
+                            tag = ConversationScreenTags.EMPTY,
+                            modifier = Modifier.padding(top = top, bottom = dockHeight),
+                        )
+                    } else {
+                        Box(Modifier.fillMaxSize())
+                    }
                     TranscriptPhase.Rows -> Transcript(state, listState, bubble, rowActions, actions.onLoadOlder, top, dockHeight, glass)
+                }
+            }
+            // New work: Task or Bot and a name, centred between the bar and the composer, riding the
+            // keyboard with it; it fades once the work is made.
+            // As last chosen, for the fade after it is made.
+            val last = remember { arrayOfNulls<NewWork>(1) }
+            (state.newWork?.also { last[0] = it } ?: last[0])?.let { shown ->
+                NewWorkRoom(state.newWork != null, Modifier.padding(top = top, bottom = dockHeight)) {
+                    NewWorkChoicePanel(shown, onChange = actions.onChoiceChange, onReturn = { nameReturns++ })
                 }
             }
             // What scrolls under the dock goes soft and pale over its top 32, Telegram's way, full width.
@@ -383,6 +406,7 @@ fun ConversationScreen(
                         // The same centred column as the messages; the bar above stays full width.
                         modifier = Modifier.contentMaxWidth(LocalWindowLayout.current),
                         backdrop = glass,
+                        focusAsks = nameReturns,
                     )
                 }
             }
@@ -475,4 +499,4 @@ internal fun activityLabel(activity: Activity?): String? = activity?.let {
 
 /** The send/stop button the composer shows; kept beside the screen for its tests. */
 internal fun primaryActionOf(hasContent: Boolean, state: ConversationState): PrimaryAction =
-    resolvePrimaryAction(hasContent = hasContent, showAbort = state.working, canAbort = state.created, blocked = false)
+    resolvePrimaryAction(hasContent = hasContent, showAbort = state.working, canAbort = state.created, blocked = false, disabled = state.newWork?.making == true)

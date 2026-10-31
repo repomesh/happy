@@ -1140,6 +1140,17 @@ export const ru: TranslationStructure = {
         friendAcceptedGeneric: 'Запрос в друзья принят',
     },
 
+    // What new work will be, in the middle of its empty chat (the native apps' compose).
+    newWork: {
+        task: 'Задача',
+        bot: 'Бот',
+        name: 'Название (необязательно)',
+        taskNote: 'Задача назовёт себя по первому сообщению, если вы не дадите ей название.',
+        botNote: 'Бот — это один долгий разговор со своей папкой.',
+        taskFailed: ({ reason }: { reason: string }) => `Не удалось запустить задачу. ${reason} Ваш текст и вложения на месте.`,
+        botFailed: ({ reason }: { reason: string }) => `Не удалось запустить бота. ${reason} Ваш текст и вложения на месте.`,
+    },
+
 } as const;
 
 export type TranslationsRu = typeof ru;

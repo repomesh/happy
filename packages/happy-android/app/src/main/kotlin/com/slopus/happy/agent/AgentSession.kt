@@ -5,6 +5,7 @@ import com.slopus.happy.connection.AgentConnections
 import com.slopus.happy.connection.AgentIdentity
 import com.slopus.happy.connection.TailcatTransport
 import com.slopus.happy.connection.Transport
+import com.slopus.happy.conversation.UnsentWork
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -209,6 +210,18 @@ class AgentSession internal constructor(
         }.invokeOnCompletion { cause -> if (cause != null) answer.complete("") }
         return answer.await()
     }
+
+    /** A bot as `POST /v0/bots` answered: home lists it before `bot.created` comes. */
+    fun upsertBot(bot: JsonObject) {
+        catalogState.update { it.withResource("bot", bot) }
+    }
+
+    /**
+     * New work compose opened and left before its first message (iOS
+     * Store's `unsent`): compose again opens the same one, with its kind,
+     * name and words. In memory only, like a draft nothing exists for yet.
+     */
+    @Volatile var unsentWork: UnsentWork? = null
 
     init {
         scope.launch {

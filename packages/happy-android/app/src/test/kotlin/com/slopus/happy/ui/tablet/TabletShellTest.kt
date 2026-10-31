@@ -177,22 +177,24 @@ class TabletShellTest {
      * one screen: a second tap adds no entry, so one Back leaves.
      */
     @Test
-    fun newSessionOpensInTheDetail() {
+    fun newSessionComposesInTheDetail() {
         session("a", 200)
         signIn()
         waitFor(FlatRowTags.ROW)
         rule.onAllNodesWithTag(HomeDockTags.DOCK, useUnmergedTree = true).assertCountEquals(0)
+        // The compose chat, not the new-session screen, beside the sidebar.
         rule.node(TabletSidebarTags.NEW_SESSION).performClick()
-        waitFor(NewSessionTags.SCREEN)
-        assertDp("new session in the detail", 360, rule.node(NewSessionTags.SCREEN).bounds.left)
-        assertDp("its own back, 48 wide", 48, rule.node(NewSessionTags.BACK).bounds.let { it.right - it.left })
+        waitFor(ChatScreenTags.SCREEN)
+        rule.onAllNodesWithTag(NewSessionTags.SCREEN, useUnmergedTree = true).assertCountEquals(0)
+        assertDp("the compose chat in the detail", 360, rule.node(ChatScreenTags.SCREEN).bounds.left)
+        assertDp("to the window's edge", TABLET_WIDTH, rule.node(ChatScreenTags.SCREEN).bounds.right)
 
         rule.node(TabletSidebarTags.NEW_SESSION).performClick()
         rule.waitForIdle()
-        rule.onAllNodesWithTag(NewSessionTags.SCREEN, useUnmergedTree = true).assertCountEquals(1)
-        rule.node(NewSessionTags.BACK).performClick()
+        rule.onAllNodesWithTag(ChatScreenTags.SCREEN, useUnmergedTree = true).assertCountEquals(1)
+        rule.node(TabletShellTags.BACK).performClick()
         waitFor(HomeTags.TABLET_BLANK)
-        rule.onAllNodesWithTag(NewSessionTags.SCREEN, useUnmergedTree = true).assertCountEquals(0)
+        rule.onAllNodesWithTag(ChatScreenTags.SCREEN, useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test

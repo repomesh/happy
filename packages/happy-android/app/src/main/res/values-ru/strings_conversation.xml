@@ -9,7 +9,6 @@
     <string name="conversation_revoked">Это устройство удалено</string>
     <string name="conversation_update_required">Требуется обновление</string>
     <string name="conversation_unavailable">Это подключение агента недоступно на этом устройстве.</string>
-    <string name="conversation_empty_new">Отправьте сообщение, чтобы начать новую задачу.</string>
     <string name="conversation_empty">Пока нет сообщений.</string>
     <string name="conversation_read_only">Этим разговором управляет другой агент, и он не принимает сообщения.</string>
     <string name="conversation_archived">Этот разговор в архиве.</string>

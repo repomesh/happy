@@ -37,6 +37,9 @@ import com.slopus.happy.conversation.ConversationSignal
 import com.slopus.happy.conversation.MediaItem
 import com.slopus.happy.conversation.Mode
 import com.slopus.happy.conversation.NewTask
+import com.slopus.happy.conversation.UnsentWork
+import com.slopus.happy.conversation.WorkChoice
+import com.slopus.happy.conversation.WorkKind
 import com.slopus.happy.ui.components.Alert
 import com.slopus.happy.ui.components.AlertButton
 import com.slopus.happy.ui.components.HappyAlert
@@ -132,23 +135,33 @@ internal fun Flow<AgentEvent>.signalsFor(agentId: String): Flow<ConversationSign
 
 /**
  * The conversation a back stack entry shows, kept through recreation. A
- * new chat's ids are made once and saved, so after process death the same
- * chat comes back (and its task, made again with the same ids, is the same
- * task); once made it opens as the chat it became.
+ * new chat's ids, kind and name are saved, so after process death the same
+ * chat comes back (and its task or bot, made again with the same ids, is the
+ * same one); once made it opens as the chat it became. Left before its first
+ * message, it is the connection's unsent work, which the next compose opens
+ * as it was left (iOS's Store `unsent`).
  */
-private class ConversationHolder(session: AgentSession, route: ConversationRoute, saved: SavedStateHandle) : ViewModel() {
+private class ConversationHolder(private val session: AgentSession, route: ConversationRoute, private val saved: SavedStateHandle) : ViewModel() {
     /** Not viewModelScope: a send or draft save in flight finishes after the screen goes. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val conversation: Conversation
+    private val task: NewTask?
 
     init {
-        val task = if (route.agentId != null) null else NewTask(
-            saved.get<String>(TASK) ?: ConversationApi.clientId().also { saved[TASK] = it },
-            saved.get<String>(WORKSPACE) ?: ConversationApi.clientId().also { saved[WORKSPACE] = it },
-            saved.get<String>(AGENT) ?: ConversationApi.clientId().also { saved[AGENT] = it },
-            saved.get<String>(MUTATION) ?: ConversationApi.clientId().also { saved[MUTATION] = it },
+        // A new chat that is not this entry's own yet takes the work left unsent, if any.
+        val unsent = if (route.agentId == null && saved.get<String>(TASK) == null) session.unsentWork?.also { session.unsentWork = null } else null
+        task = if (route.agentId != null) null else NewTask(
+            saved.get<String>(TASK) ?: (unsent?.task?.taskId ?: ConversationApi.clientId()).also { saved[TASK] = it },
+            saved.get<String>(WORKSPACE) ?: (unsent?.task?.workspaceId ?: ConversationApi.clientId()).also { saved[WORKSPACE] = it },
+            saved.get<String>(AGENT) ?: (unsent?.task?.agentId ?: ConversationApi.clientId()).also { saved[AGENT] = it },
+            saved.get<String>(MUTATION) ?: (unsent?.task?.mutationId ?: ConversationApi.clientId()).also { saved[MUTATION] = it },
         )
+        val choice = unsent?.choice ?: WorkChoice(
+            if (saved.get<String>(KIND) == WorkKind.Bot.name) WorkKind.Bot else WorkKind.Task,
+            saved.get<String>(NAME).orEmpty(),
+        )
+        unsent?.let { setChoiceSaved(it.choice) }
         val agentId = route.agentId ?: task!!.agentId
         conversation = Conversation(
             api = ConversationApi(session.conversationRequest()),
@@ -156,18 +169,38 @@ private class ConversationHolder(session: AgentSession, route: ConversationRoute
             scope = scope,
             agentId = agentId,
             newTask = task.takeIf { saved.get<Boolean>(CREATED) != true },
+            initialDraft = unsent?.draft.orEmpty(),
             // The row that was tapped already had a name: the bar has it from the first frame.
             knownTitle = route.agentId?.let(session.feed.value::title),
+            initialChoice = choice,
             onTaskCreated = { answer ->
                 saved[CREATED] = true
                 answer["task"].obj?.let { session.upsertTask(it, answer["membership"].obj) }
+                answer["bot"].obj?.let(session::upsertBot)
             },
         )
         conversation.start()
         saved.takePrefill(route.prefill)?.let(conversation::prefill)
     }
 
+    /** Task or Bot and the name, kept with the entry as they are picked. */
+    fun setChoice(choice: WorkChoice) {
+        setChoiceSaved(choice)
+        conversation.setChoice(choice)
+    }
+
+    private fun setChoiceSaved(choice: WorkChoice) {
+        saved[KIND] = choice.kind.name
+        saved[NAME] = choice.name
+    }
+
     override fun onCleared() {
+        val state = conversation.state.value
+        val work = state.newWork
+        // Left unmade and not on its way: the next compose opens it as it was.
+        if (task != null && work != null && !work.making && saved.get<Boolean>(CREATED) != true) {
+            session.unsentWork = UnsentWork(task, work.choice, state.draft)
+        }
         conversation.close()
     }
 
@@ -177,6 +210,8 @@ private class ConversationHolder(session: AgentSession, route: ConversationRoute
         const val AGENT = "agentId"
         const val MUTATION = "mutationId"
         const val CREATED = "created"
+        const val KIND = "kind"
+        const val NAME = "name"
     }
 }
 
@@ -253,6 +288,7 @@ private fun ConversationEntry(graph: AppGraph, nav: NavHostController, route: Co
                         )
                     },
                     onVisible = conversation::setVisible,
+                    onChoiceChange = holder::setChoice,
                     // The values typed into a secret go in this one request to the computer and nowhere else.
                     secrets = SecretRequestActions(
                         secrets = { ConversationApi(session.conversationRequest()).secrets() },
@@ -262,10 +298,14 @@ private fun ConversationEntry(graph: AppGraph, nav: NavHostController, route: Co
             },
         )
     }
-    state.alert?.let { message ->
+    // New work that could not be made says why; nothing was sent, and the composer keeps it all.
+    val message = state.alert ?: state.workFailure?.let { failure ->
+        stringResource(if (failure.kind == WorkKind.Bot) R.string.new_work_bot_failed else R.string.new_work_task_failed, failure.reason)
+    }
+    message?.let {
         val title = stringResource(R.string.common_error)
         val ok = stringResource(R.string.common_ok)
-        HappyAlert(Alert(title, message, listOf(AlertButton(ok))), onDismiss = conversation::dismissAlert)
+        HappyAlert(Alert(title, it, listOf(AlertButton(ok))), onDismiss = conversation::dismissAlert)
     }
 }
 
