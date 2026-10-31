@@ -93,4 +93,17 @@
     <string name="conversation_mode_permission_item">Permisos: %1$s</string>
     <string name="conversation_pictures_too_large_title">Imágenes demasiado grandes</string>
     <string name="conversation_pictures_too_large_message">Juntas, estas imágenes superan lo que cabe en un mensaje. Quita algunas y vuelve a enviar.</string>
+    <string name="conversation_problem_refused">El agente lo rechazó (%1$d).</string>
+    <string name="conversation_problem_unknown">Algo salió mal.</string>
+    <string name="conversation_problem_pictures">No se pudieron leer las imágenes para enviar.</string>
+    <string name="conversation_failure_signin_missing">%1$s no ha iniciado sesión. Ejecuta `%2$s` y vuelve a intentarlo.</string>
+    <string name="conversation_failure_cannot_authenticate">%1$s no pudo autenticarse. Revisa su configuración de inicio de sesión y vuelve a intentarlo.</string>
+    <string name="conversation_failure_usage_limit">Se alcanzó el límite de uso de %1$s.</string>
+    <string name="conversation_failure_no_account">Todas las cuentas de «%1$s» agotaron su uso.</string>
+    <string name="conversation_failure_rate_limited">%1$s está limitando las solicitudes. Vuelve a intentarlo en un minuto.</string>
+    <string name="conversation_failure_provider_unavailable">%1$s está sobrecargado en este momento. Vuelve a intentarlo en un momento.</string>
+    <string name="conversation_failure_network">No se pudo conectar con %1$s. Revisa tu conexión y vuelve a intentarlo.</string>
+    <string name="conversation_failure_context_too_long">Esta conversación es demasiado larga para %1$s, incluso después de restablecerla.</string>
+    <string name="conversation_failure_provider_disabled">%1$s está desactivado. Actívalo en Ajustes y vuelve a intentarlo.</string>
+    <string name="conversation_failure_internal">Algo salió mal: %1$s</string>
 </resources>

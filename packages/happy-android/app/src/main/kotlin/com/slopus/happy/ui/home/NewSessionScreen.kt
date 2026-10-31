@@ -1,5 +1,6 @@
 package com.slopus.happy.ui.home
 
+import com.slopus.happy.text.words
 import android.content.res.Resources
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -190,8 +191,8 @@ fun rememberNewSessionDock(
                             }
                         }
                         is StartResult.NotSent -> notices = result.notices.map { attachmentNoticeAlert(it, resources) }
-                        is StartResult.Refused -> alert = Alert(strings.error, result.refusal.message, listOf(AlertButton(strings.ok)))
-                        is StartResult.Failed -> alert = Alert(strings.error, result.message, listOf(AlertButton(strings.ok)))
+                        is StartResult.Refused -> alert = Alert(strings.error, resources.getString(result.refusal.text), listOf(AlertButton(strings.ok)))
+                        is StartResult.Failed -> alert = Alert(strings.error, resources.words(result.message), listOf(AlertButton(strings.ok)))
                         StartResult.Abandoned -> Unit
                     }
                 }

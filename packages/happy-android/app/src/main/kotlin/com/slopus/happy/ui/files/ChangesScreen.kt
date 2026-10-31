@@ -1,5 +1,6 @@
 package com.slopus.happy.ui.files
 
+import com.slopus.happy.text.wordsResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -96,25 +97,25 @@ private fun AgentBody(content: ChangesContent.Agent, actions: ChangesActions, sc
     val state = content.state
     val load = state.load
     when {
-        !content.supported -> ChangesMessage("Update Happy Agent on your computer to view changes in this session.")
+        !content.supported -> ChangesMessage(stringResource(R.string.files_update_agent))
         load is AgentChanges.Load.Loading -> Spinner()
-        load is AgentChanges.Load.Error -> ChangesMessage(load.message, actions.onRetry)
+        load is AgentChanges.Load.Error -> ChangesMessage(wordsResource(load.message), actions.onRetry)
         load is AgentChanges.Load.Ready && (load.git.comparison != "ready" || load.git.base == null) ->
-            ChangesMessage("A comparison with origin/main is not available for this workspace.", actions.onRetry)
+            ChangesMessage(stringResource(R.string.files_no_comparison), actions.onRetry)
         else -> {
             val notices = state.notices
             val colors = HappyTheme.colors
             DiffFilesList(
-                items = state.items(stringResource(R.string.files_file_empty)),
+                items = state.items(),
                 scrollToPath = scrollToFile,
                 defaultCollapsed = true,
                 onRequestContent = actions.onRequestContent,
                 onExpandContext = actions.onExpandContext,
-                emptyText = if (state.clean) stringResource(R.string.files_no_changes) else "No file details are available for this comparison.",
+                emptyText = if (state.clean) stringResource(R.string.files_no_changes) else stringResource(R.string.files_no_details),
                 header = if (notices.isEmpty()) null else {
                     {
                         Column(Modifier.fillMaxWidth().testTag(ChangesTags.NOTICES).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            for (notice in notices) Text(notice, style = messageStyle, color = colors.textSecondary)
+                            for (notice in notices) Text(wordsResource(notice), style = messageStyle, color = colors.textSecondary)
                         }
                     }
                 },

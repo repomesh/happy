@@ -30,6 +30,8 @@ import com.slopus.happy.artifacts.ArtifactClient
 import com.slopus.happy.artifacts.ArtifactListing
 import com.slopus.happy.artifacts.ArtifactRef
 import com.slopus.happy.conversation.Conversation
+import com.slopus.happy.conversation.Problem
+import com.slopus.happy.ui.conversation.problemText
 import com.slopus.happy.ui.components.Icon
 import com.slopus.happy.ui.components.Ionicon
 import com.slopus.happy.ui.components.StatePage
@@ -62,7 +64,7 @@ object ArtifactsTags {
  * whether it failed with nothing to show.
  */
 @Immutable
-data class ArtifactListState(val items: List<ArtifactRef>, val next: String?, val failed: Boolean = false, val loaded: Boolean = false, val reason: String? = null)
+data class ArtifactListState(val items: List<ArtifactRef>, val next: String?, val failed: Boolean = false, val loaded: Boolean = false, val reason: Problem? = null)
 
 /**
  * The artifact catalog, as iOS's `ArtifactsViewController` reads it: the
@@ -138,7 +140,7 @@ fun ArtifactsScreen(
         when {
             read.items.isEmpty() && read.failed -> StatePage(
                 title = stringResource(R.string.agent_artifacts_failed),
-                body = read.reason,
+                body = read.reason?.let { problemText(it) },
                 icon = Ionicon.CloudOfflineOutline,
                 action = stringResource(R.string.common_retry) to onRetry,
                 tag = ArtifactsTags.FAILED,

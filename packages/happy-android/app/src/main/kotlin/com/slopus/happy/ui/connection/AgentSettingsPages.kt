@@ -1,5 +1,6 @@
 package com.slopus.happy.ui.connection
 
+import com.slopus.happy.ui.components.ProvideRowReveal
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -78,25 +79,28 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
-/** An agent connection's Appearance: the theme and the desktop's Hide projects. */
-@Serializable data class AgentAppearanceRoute(val connectionId: String)
+/** An agent connection's Appearance: the theme and the desktop's Hide projects; [reveal] as on settings. */
+@Serializable data class AgentAppearanceRoute(val connectionId: String, val reveal: String? = null)
 
 /** The person's own profile on an agent connection. */
 @Serializable data class AgentProfileRoute(val connectionId: String)
 
 internal fun NavGraphBuilder.agentSettingsPages(graph: AppGraph, nav: NavHostController) {
     composable<AgentAppearanceRoute> { entry ->
-        val id = entry.toRoute<AgentAppearanceRoute>().connectionId
+        val route = entry.toRoute<AgentAppearanceRoute>()
+        val id = route.connectionId
         val session = remember(id) { graph.agentSessions.session(id) }
         val theme by graph.localSettings.themePreference.collectAsStateWithLifecycle()
         val hidden = session?.projectsHidden?.collectAsStateWithLifecycle()?.value ?: false
-        AgentAppearanceScreen(
-            theme = theme,
-            onTheme = graph.localSettings::setThemePreference,
-            projectsHidden = hidden,
-            onProjectsHidden = { session?.setProjectsHidden(it) },
-            onBack = { nav.popBackStack() },
-        )
+        ProvideRowReveal(route.reveal) {
+            AgentAppearanceScreen(
+                theme = theme,
+                onTheme = graph.localSettings::setThemePreference,
+                projectsHidden = hidden,
+                onProjectsHidden = { session?.setProjectsHidden(it) },
+                onBack = { nav.popBackStack() },
+            )
+        }
     }
     composable<AgentProfileRoute> { entry ->
         val id = entry.toRoute<AgentProfileRoute>().connectionId

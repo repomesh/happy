@@ -32,4 +32,9 @@
     <string name="scan_torch_on">Accendi la torcia</string>
     <string name="scan_torch_off">Spegni la torcia</string>
     <string name="state_animation_replay">Riproduci di nuovo</string>
+    <string name="scan_no_camera">Questo dispositivo non ha una fotocamera. Incolla il link.</string>
+    <string name="scan_camera_failed">Impossibile avviare la fotocamera. Riprova o incolla il link.</string>
+    <string name="voice_microphone_title">Accesso al microfono necessario</string>
+    <string name="voice_microphone_ask">Happy ha bisogno dell\'accesso al microfono per la chat vocale. Concedi l\'autorizzazione quando richiesto.</string>
+    <string name="voice_microphone_settings">Happy ha bisogno dell\'accesso al microfono per la chat vocale. Attiva l\'accesso al microfono nelle impostazioni del dispositivo.</string>
 </resources>

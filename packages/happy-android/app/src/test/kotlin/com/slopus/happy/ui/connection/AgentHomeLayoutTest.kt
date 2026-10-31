@@ -1,5 +1,6 @@
 package com.slopus.happy.ui.connection
 
+import com.slopus.happy.ui.settings.SettingsTags
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,13 +68,14 @@ class AgentHomeLayoutTest {
     private val opened = mutableListOf<String>()
     private var composed = 0
     private var settings = 0
+    private val settingsRows = mutableListOf<AgentSettingsRow>()
     private var artifacts = 0
     private val surfaces = mutableListOf<AgentFeedRow.Surface>()
     private val actions = AgentHomeActions(
         onOpenConversation = { opened += it },
         onCompose = { composed++ },
         onSettings = { settings++ },
-        onAppearance = {},
+        onSettingsRow = { settingsRows += it },
         onSwitchAccount = {},
         onAdd = {},
         onOpenArtifacts = { artifacts++ },
@@ -386,17 +388,46 @@ class AgentHomeLayoutTest {
         rule.node(AgentHomeTags.SEARCH).performClick()
         rule.node(AgentSearchTags.FIELD).performTextInput("appear")
         rule.waitForIdle()
-        rule.node(AgentSearchTags.result("entry-appearance")).assertExists()
+        rule.node(AgentSearchTags.result("entry-${AgentSettingsTags.APPEARANCE}")).assertExists()
         rule.node(AgentSearchTags.FIELD).performTextReplacement("new")
         rule.node(AgentSearchTags.result("entry-new-chat")).performClick()
         assertEquals(1, composed)
         rule.node(AgentSearchTags.FIELD).performTextReplacement("Settings")
         rule.node(AgentSearchTags.result("entry-settings")).performClick()
         assertEquals(1, settings)
-        // "Remove connection" only opens settings, where removing asks first.
-        rule.node(AgentSearchTags.FIELD).performTextReplacement("remove")
-        rule.node(AgentSearchTags.result("entry-remove")).performClick()
-        assertEquals(2, settings)
+        // Nothing that takes the connection away: as iOS's SettingsIndex, Disconnect isn't offered.
+        rule.node(AgentSearchTags.FIELD).performTextReplacement("disconnect")
+        rule.waitForIdle()
+        rule.node(AgentSearchTags.NO_RESULTS).assertExists()
+    }
+
+    /**
+     * iOS's home search over `SettingsIndex.computer`: the settings it
+     * finds are the connection's settings rows, under Settings, and a tap
+     * hands that row (its id and page) to be opened there.
+     */
+    @Test
+    fun searchJumpsToASettingsRow() {
+        show(feed())
+        rule.node(AgentHomeTags.SEARCH).performClick()
+        rule.node(AgentSearchTags.FIELD).performTextInput("hide")
+        rule.waitForIdle()
+        rule.onNodeWithText("Settings").assertExists()
+        rule.node(AgentSearchTags.result("entry-${AgentPagesTags.HIDE_PROJECTS_ROW}")).performClick()
+        rule.waitForIdle()
+        assertEquals(listOf(AgentPagesTags.HIDE_PROJECTS_ROW to AgentSettingsPlace.Appearance), settingsRows.map { it.id to it.place })
+
+        rule.node(AgentSearchTags.FIELD).performTextReplacement("privacy")
+        rule.node(AgentSearchTags.result("entry-${SettingsTags.PRIVACY}")).performClick()
+        rule.node(AgentSearchTags.FIELD).performTextReplacement("edit name")
+        rule.node(AgentSearchTags.result("entry-${AgentSettingsTags.ASK_NAME}")).performClick()
+        rule.waitForIdle()
+        assertEquals(
+            listOf(SettingsTags.PRIVACY to AgentSettingsPlace.Settings, AgentSettingsTags.ASK_NAME to AgentSettingsPlace.Ask),
+            settingsRows.drop(1).map { it.id to it.place },
+        )
+        assertEquals("Change your name to ", settingsRows.last().ask)
+        assertEquals(0, settings)
     }
 
     @Test

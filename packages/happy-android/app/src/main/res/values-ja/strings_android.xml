@@ -30,4 +30,9 @@
     <string name="scan_torch_on">ライトをオン</string>
     <string name="scan_torch_off">ライトをオフ</string>
     <string name="state_animation_replay">もう一度再生</string>
+    <string name="scan_no_camera">このデバイスにはカメラがありません。リンクを貼り付けてください。</string>
+    <string name="scan_camera_failed">カメラを起動できませんでした。もう一度試すか、リンクを貼り付けてください。</string>
+    <string name="voice_microphone_title">マイクへのアクセスが必要です</string>
+    <string name="voice_microphone_ask">ボイスチャットには Happy がマイクにアクセスする必要があります。確認が表示されたら許可してください。</string>
+    <string name="voice_microphone_settings">ボイスチャットには Happy がマイクにアクセスする必要があります。デバイスの設定でマイクへのアクセスを有効にしてください。</string>
 </resources>

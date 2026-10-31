@@ -1,5 +1,7 @@
 package com.slopus.happy.ui.connection
 
+import com.slopus.happy.ui.settings.SettingsTags
+import com.slopus.happy.ui.components.ProvideRowReveal
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
@@ -73,21 +75,80 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
-/** An agent connection's settings. */
-@Serializable data class AgentConnectionSettingsRoute(val connectionId: String)
+/** An agent connection's settings; [reveal]: the row home's search found there ([ProvideRowReveal]). */
+@Serializable data class AgentConnectionSettingsRoute(val connectionId: String, val reveal: String? = null)
 
 /** The agent connection screens beside home. HappyApp's NavHost calls this once. */
 fun NavGraphBuilder.agentHomeRoutes(graph: AppGraph, nav: NavHostController) {
     composable<AgentConnectionSettingsRoute> { entry ->
-        AgentConnectionSettings(graph, nav, entry.toRoute<AgentConnectionSettingsRoute>().connectionId)
+        val route = entry.toRoute<AgentConnectionSettingsRoute>()
+        ProvideRowReveal(route.reveal) { AgentConnectionSettings(graph, nav, route.connectionId) }
     }
     agentSettingsPages(graph, nav)
+}
+
+/** Where a row of an agent connection's settings is: its page, or the picture's menu (an ask, which runs). */
+enum class AgentSettingsPlace { Settings, Appearance, Ask }
+
+/**
+ * One row of an agent connection's settings as home's search finds it
+ * (iOS's `SettingsIndex.Entry`): the id the page tags and reveals it by,
+ * its title there, its glyph, and where it is. [ask] is an ask's words.
+ */
+@Immutable
+data class AgentSettingsRow(val id: String, val title: String, val icon: Ionicon, val place: AgentSettingsPlace, val ask: String? = null)
+
+/**
+ * iOS's `SettingsIndex.computer`: what an agent connection's settings show,
+ * in their order, the picture's two asks and Appearance's Hide projects
+ * included. Disconnect is left out: a search doesn't offer to take the
+ * connection away. The titles are the page's own (`AgentSettingsIndexTest`).
+ */
+@Composable
+fun agentSettingsIndex(): List<AgentSettingsRow> {
+    fun row(id: String, title: String, icon: Ionicon, place: AgentSettingsPlace = AgentSettingsPlace.Settings, ask: String? = null) =
+        AgentSettingsRow(id, title, icon, place, ask)
+    return listOf(
+        row(AgentSettingsTags.PROFILE, stringResource(R.string.settings_account_profile), Ionicon.PersonCircleOutline),
+        row(AgentSettingsTags.ASK_NAME, stringResource(R.string.settings_edit_name), Ionicon.CreateOutline, AgentSettingsPlace.Ask, stringResource(R.string.agent_settings_edit_name_prefix)),
+        row(AgentSettingsTags.ASK_AVATAR, stringResource(R.string.settings_change_avatar), Ionicon.ImageOutline, AgentSettingsPlace.Ask, stringResource(R.string.agent_settings_edit_avatar_prefix)),
+        row(AgentSettingsTags.APPEARANCE, stringResource(R.string.settings_appearance), Ionicon.ColorPaletteOutline),
+        row(AgentPagesTags.HIDE_PROJECTS_ROW, stringResource(R.string.settings_hide_projects), Ionicon.FolderOutline, AgentSettingsPlace.Appearance),
+        row(SettingsTags.SUPPORT, stringResource(R.string.settings_support_us), Ionicon.HeartOutline),
+        row(SettingsPageTags.ADD_AGENT, stringResource(R.string.settings_add_agent), Ionicon.Add),
+        row(SettingsTags.WHATS_NEW, stringResource(R.string.settings_whats_new), Ionicon.SparklesOutline),
+        row(SettingsTags.GITHUB, stringResource(R.string.settings_github), Ionicon.LogoGithub),
+        row(SettingsTags.REPORT_ISSUE, stringResource(R.string.settings_report_issue), Ionicon.BugOutline),
+        row(SettingsTags.PRIVACY, stringResource(R.string.settings_privacy_policy), Ionicon.ShieldCheckmarkOutline),
+        row(SettingsTags.TERMS, stringResource(R.string.settings_terms_of_service), Ionicon.DocumentTextOutline),
+        row(SettingsTags.VERSION, stringResource(R.string.common_version), Ionicon.InformationCircleOutline),
+    )
+}
+
+/**
+ * Opens [row] as iOS's `SettingsViewController.open(reveal:)` does: the
+ * connection's settings, scrolled to the row with it flashing; a row of
+ * Appearance's on that page, over settings; an ask runs, the Chief of
+ * Staff's chat opening with its words typed in.
+ */
+fun NavHostController.openAgentSettingsRow(connectionId: String, row: AgentSettingsRow) {
+    when (row.place) {
+        AgentSettingsPlace.Settings -> navigate(AgentConnectionSettingsRoute(connectionId, reveal = row.id))
+        AgentSettingsPlace.Appearance -> {
+            navigate(AgentConnectionSettingsRoute(connectionId))
+            navigate(AgentAppearanceRoute(connectionId, reveal = row.id))
+        }
+        AgentSettingsPlace.Ask -> openChiefOfStaff(connectionId, row.ask.orEmpty())
+    }
 }
 
 object AgentSettingsTags {
     const val BAR = "agentSettings.bar"
     const val PROFILE = "agentSettings.profile"
     const val APPEARANCE = "agentSettings.appearance"
+    /** The picture's two asks, as search finds them. */
+    const val ASK_NAME = "agentSettings.ask.name"
+    const val ASK_AVATAR = "agentSettings.ask.avatar"
 }
 
 /** Everything an agent connection's settings ask of the app. */
@@ -188,8 +249,8 @@ fun AgentConnectionSettingsScreen(
         if (search.searching) {
             // The picture's two asks, found here, run: the Chief of Staff's chat opens with the words typed in.
             val asks = listOf(
-                SettingsEntry(ASK_NAME, editName, icon = { SettingsTile(Ionicon.CreateOutline, SettingsTiles.blue) }, chevron = false, onClick = { actions.onAskChief(namePrefix) }, closesSearch = true),
-                SettingsEntry(ASK_AVATAR, changeAvatar, icon = { SettingsTile(Ionicon.ImageOutline, SettingsTiles.orange) }, chevron = false, onClick = { actions.onAskChief(avatarPrefix) }, closesSearch = true),
+                SettingsEntry(AgentSettingsTags.ASK_NAME, editName, icon = { SettingsTile(Ionicon.CreateOutline, SettingsTiles.blue) }, chevron = false, onClick = { actions.onAskChief(namePrefix) }, closesSearch = true),
+                SettingsEntry(AgentSettingsTags.ASK_AVATAR, changeAvatar, icon = { SettingsTile(Ionicon.ImageOutline, SettingsTiles.orange) }, chevron = false, onClick = { actions.onAskChief(avatarPrefix) }, closesSearch = true),
             )
             val profiles = settingsProfileEntries(accounts, accountActions.onSwitch)
             val rows = listOf(addAgentEntry(accountActions)) + sections.flatMap { it.rows } + appearance
@@ -204,9 +265,6 @@ fun AgentConnectionSettingsScreen(
         }
     }
 }
-
-private const val ASK_NAME = "agentSettings.ask.name"
-private const val ASK_AVATAR = "agentSettings.ask.avatar"
 
 /** The person's picture round at [size], else the one [seed] picks (as their Profile page shows it). */
 @Composable

@@ -30,4 +30,9 @@
     <string name="scan_torch_on">打开手电筒</string>
     <string name="scan_torch_off">关闭手电筒</string>
     <string name="state_animation_replay">再次播放</string>
+    <string name="scan_no_camera">此设备没有摄像头。请粘贴链接。</string>
+    <string name="scan_camera_failed">无法启动摄像头。请重试或粘贴链接。</string>
+    <string name="voice_microphone_title">需要麦克风权限</string>
+    <string name="voice_microphone_ask">Happy 需要访问麦克风才能进行语音聊天。出现提示时请允许。</string>
+    <string name="voice_microphone_settings">Happy 需要访问麦克风才能进行语音聊天。请在设备设置中开启麦克风权限。</string>
 </resources>

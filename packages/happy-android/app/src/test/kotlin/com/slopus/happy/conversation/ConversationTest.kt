@@ -244,7 +244,7 @@ class ConversationTest {
         chat.send("Hello")
         advanceUntilIdle()
         val row = chat.state.value.rows.single() as ConversationRow.User
-        assertEquals(Delivery.Failed("Unknown model."), row.delivery)
+        assertEquals(Delivery.Failed(Problem.Said("Unknown model.")), row.delivery)
         agent.sendStatus = 202
         chat.retrySend(row.messageId)
         advanceUntilIdle()
@@ -344,7 +344,7 @@ class ConversationTest {
         chat.setDraft("Hello")
         assertFalse(chat.send("Hello"))
         advanceUntilIdle()
-        assertEquals(WorkFailure(WorkKind.Bot, "Name already taken."), chat.state.value.workFailure)
+        assertEquals(WorkFailure(WorkKind.Bot, Problem.Said("Name already taken.")), chat.state.value.workFailure)
         assertFalse(chat.state.value.created)
         assertTrue(chat.state.value.rows.isEmpty())
         assertNull(chat.state.value.taken)
@@ -560,7 +560,7 @@ class ConversationTest {
         val chat = conversation(agent)
         advanceUntilIdle()
         val failure = chat.state.value.rows.single() as ConversationRow.Failure
-        assertEquals("Claude usage limit reached.", failure.reason)
+        assertEquals(FailureReason.UsageLimit("Claude"), failure.reason)
         assertTrue(failure.retryable)
         chat.retryFailure(failure.messageId)
         advanceUntilIdle()
@@ -634,7 +634,7 @@ class ConversationTest {
         advanceUntilIdle()
         assertTrue(agent.requests.none { it.second.endsWith("/send") })
         assertEquals("Look", chat.state.value.draft)
-        assertEquals("Couldn't read the pictures to send.", chat.state.value.alert)
+        assertEquals(Problem.PicturesUnreadable, chat.state.value.alert)
     }
 
     @Test fun `pictures fit one message up to the inline limits`() {

@@ -1,5 +1,6 @@
 package com.slopus.happy.ui.files
 
+import com.slopus.happy.text.Words
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -138,7 +139,7 @@ class FilesLayoutTest {
     @Test
     fun agentMessagesOfferRetry() {
         var retried = 0
-        var content by mutableStateOf<ChangesContent>(ChangesContent.Agent(AgentChanges.State(load = AgentChanges.Load.Error("boom")), supported = true))
+        var content by mutableStateOf<ChangesContent>(ChangesContent.Agent(AgentChanges.State(load = AgentChanges.Load.Error(Words.Said("boom"))), supported = true))
         show { ChangesScreen(content, ChangesActions(onRetry = { retried++ })) }
         rule.onNodeWithText("boom").assertExists()
         val message = rule.node(ChangesTags.MESSAGE).bounds

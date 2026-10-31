@@ -1,5 +1,7 @@
 package com.slopus.happy.ui.diff
 
+import com.slopus.happy.text.wordsResource
+import com.slopus.happy.text.Words
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -63,9 +65,9 @@ data class DiffFileItem(
     val source: DiffSource? = null,
     /** Set instead of [source] for files that are pictures rather than text. */
     val image: DiffImages? = null,
-    val error: String? = null,
+    val error: Words? = null,
     /** Why a file has no text body (empty, conflicted, ...). */
-    val message: String? = null,
+    val message: Words? = null,
     /** Stable identity; [path] when null. */
     val key: String? = null,
 ) {
@@ -209,8 +211,8 @@ fun DiffFilesList(
                         Text(pluralResource(R.plurals.diff_tap_to_expand, count, count), style = happyTextStyle(fontSize = 13), color = palette.textSecondary)
                     }
                 }
-                item.error != null -> item(key = "body:${item.id}") { SectionMessage(item.error, palette, tint, width) }
-                item.message != null -> item(key = "body:${item.id}") { SectionMessage(item.message, palette, tint, width) }
+                item.error != null -> item(key = "body:${item.id}") { SectionMessage(wordsResource(item.error), palette, tint, width) }
+                item.message != null -> item(key = "body:${item.id}") { SectionMessage(wordsResource(item.message), palette, tint, width) }
                 item.image != null -> item(key = "body:${item.id}") { DiffImageView(item.image.before, item.image.after, width) }
                 item.source == null -> item(key = "body:${item.id}") {
                     LaunchedEffect(item.path) { if (requested.add(item.path)) runCatching { requestContent?.invoke(item.path) } }

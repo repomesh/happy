@@ -33,4 +33,9 @@
     <string name="scan_torch_on">Włącz latarkę</string>
     <string name="scan_torch_off">Wyłącz latarkę</string>
     <string name="state_animation_replay">Odtwórz ponownie</string>
+    <string name="scan_no_camera">To urządzenie nie ma aparatu. Wklej link.</string>
+    <string name="scan_camera_failed">Nie udało się uruchomić aparatu. Spróbuj ponownie albo wklej link.</string>
+    <string name="voice_microphone_title">Wymagany dostęp do mikrofonu</string>
+    <string name="voice_microphone_ask">Happy potrzebuje dostępu do mikrofonu na potrzeby czatu głosowego. Zezwól na niego, gdy pojawi się pytanie.</string>
+    <string name="voice_microphone_settings">Happy potrzebuje dostępu do mikrofonu na potrzeby czatu głosowego. Włącz dostęp do mikrofonu w ustawieniach urządzenia.</string>
 </resources>

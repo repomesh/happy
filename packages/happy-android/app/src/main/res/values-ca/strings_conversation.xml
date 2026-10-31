@@ -93,4 +93,17 @@
     <string name="conversation_mode_permission_item">Permisos: %1$s</string>
     <string name="conversation_pictures_too_large_title">Imatges massa grans</string>
     <string name="conversation_pictures_too_large_message">Juntes, aquestes imatges superen el que hi cap en un missatge. Treu-ne algunes i torna a enviar.</string>
+    <string name="conversation_problem_refused">L\'agent ho ha rebutjat (%1$d).</string>
+    <string name="conversation_problem_unknown">Alguna cosa ha anat malament.</string>
+    <string name="conversation_problem_pictures">No s\'han pogut llegir les imatges per enviar.</string>
+    <string name="conversation_failure_signin_missing">%1$s no ha iniciat la sessió. Executa `%2$s` i torna-ho a provar.</string>
+    <string name="conversation_failure_cannot_authenticate">%1$s no s\'ha pogut autenticar. Revisa la configuració d\'inici de sessió i torna-ho a provar.</string>
+    <string name="conversation_failure_usage_limit">S\'ha arribat al límit d\'ús de %1$s.</string>
+    <string name="conversation_failure_no_account">Tots els comptes de «%1$s» han esgotat l\'ús.</string>
+    <string name="conversation_failure_rate_limited">%1$s està limitant les sol·licituds. Torna-ho a provar d\'aquí a un minut.</string>
+    <string name="conversation_failure_provider_unavailable">%1$s està sobrecarregat ara mateix. Torna-ho a provar d\'aquí a una estona.</string>
+    <string name="conversation_failure_network">No s\'ha pogut connectar amb %1$s. Revisa la connexió i torna-ho a provar.</string>
+    <string name="conversation_failure_context_too_long">Aquesta conversa és massa llarga per a %1$s, fins i tot després de restablir-la.</string>
+    <string name="conversation_failure_provider_disabled">%1$s està desactivat. Activa\'l a Configuració i torna-ho a provar.</string>
+    <string name="conversation_failure_internal">Alguna cosa ha anat malament: %1$s</string>
 </resources>

@@ -33,6 +33,8 @@
     <!-- Scans that can't be approved where they were made (ui/connect/ConnectFlows.kt).
          happy-app ignores these silently; the native apps say why. -->
     <string name="scan_unavailable">The QR scanner isn\'t available on this device. Paste the link instead.</string>
+    <string name="scan_no_camera">This device has no camera. Paste the link instead.</string>
+    <string name="scan_camera_failed">The camera couldn\'t start. Try again, or paste the link instead.</string>
     <string name="scan_not_happy_code">This QR code isn\'t a Happy code.</string>
     <string name="scan_terminal_code_elsewhere">This code connects a terminal. Scan it from Settings › Scan QR code to authenticate.</string>
     <string name="scan_account_code_elsewhere">This code links a new device. Scan it from Settings › Backup &amp; Restore › Link New Device.</string>
@@ -49,4 +51,9 @@
 
     <!-- State pictures (ui/components/StateAnimation.kt). -->
     <string name="state_animation_replay">Play again</string>
+
+    <!-- microphonePermissions.ts (English inline there). -->
+    <string name="voice_microphone_title">Microphone Access Required</string>
+    <string name="voice_microphone_ask">Happy needs access to your microphone for voice chat. Please grant permission when prompted.</string>
+    <string name="voice_microphone_settings">Happy needs access to your microphone for voice chat. Please enable microphone access in your device settings.</string>
 </resources>

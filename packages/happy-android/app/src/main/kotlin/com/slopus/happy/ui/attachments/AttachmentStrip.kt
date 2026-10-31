@@ -1,5 +1,7 @@
 package com.slopus.happy.ui.attachments
 
+import androidx.compose.ui.res.stringResource
+import com.slopus.happy.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -107,6 +109,7 @@ private fun AttachmentThumbnail(image: AttachmentPreview, onRemove: (String) -> 
             RemoteImage(image.uri, contentDescription = image.name, contentScale = ContentScale.Crop, modifier = Modifier.size(AttachmentStripSpec.thumb))
         }
         val interaction = remember { MutableInteractionSource() }
+        val removeLabel = stringResource(R.string.chat_remove_image, image.name)
         val pressed by interaction.collectIsPressedAsState()
         Box(
             modifier = Modifier
@@ -118,7 +121,7 @@ private fun AttachmentThumbnail(image: AttachmentPreview, onRemove: (String) -> 
                 .alpha(if (pressed) AttachmentStripSpec.PRESSED_OPACITY else 1f)
                 .background(colors.surfaceHigh, CircleShape)
                 .clickable(interaction, indication = null, role = Role.Button) { onRemove(image.id) }
-                .semantics { contentDescription = "Remove ${image.name}" },
+                .semantics { contentDescription = removeLabel },
             contentAlignment = Alignment.Center,
         ) {
             Icon(Ionicon.Close, AttachmentStripSpec.removeIcon, colors.text)
@@ -136,6 +139,7 @@ private fun AttachmentThumbnail(image: AttachmentPreview, onRemove: (String) -> 
 fun AddImageButton(attached: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = HappyTheme.colors
     val interaction = remember { MutableInteractionSource() }
+    val addLabel = stringResource(R.string.chat_add_photo)
     val pressed by interaction.collectIsPressedAsState()
     Box(
         modifier = modifier
@@ -145,7 +149,7 @@ fun AddImageButton(attached: Boolean, onClick: () -> Unit, modifier: Modifier = 
             .clip(RoundedCornerShape(AttachmentStripSpec.addRadius))
             .clickable(interaction, indication = null, role = Role.Button, onClick = onClick)
             .padding(horizontal = AttachmentStripSpec.addPaddingHorizontal, vertical = AttachmentStripSpec.addPaddingVertical)
-            .semantics { contentDescription = "Add photo" },
+            .semantics { contentDescription = addLabel },
         contentAlignment = Alignment.Center,
     ) {
         Icon(

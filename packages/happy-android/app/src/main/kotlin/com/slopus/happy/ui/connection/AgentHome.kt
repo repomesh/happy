@@ -85,7 +85,8 @@ class AgentHomeActions(
     /** Opens an empty new chat. */
     val onCompose: () -> Unit,
     val onSettings: () -> Unit,
-    val onAppearance: () -> Unit,
+    /** Opens a row of the connection's settings search found ([openAgentSettingsRow]). */
+    val onSettingsRow: (AgentSettingsRow) -> Unit,
     val onSwitchAccount: (String) -> Unit,
     /** Scans a code and adds the Happy account or agent connection it is for. */
     val onAdd: () -> Unit,
@@ -374,26 +375,23 @@ private fun LeaveSurfaceDialogs(
 /** What home's page shows under the bar. */
 private enum class HomePhase { Loading, Offline, Empty, List }
 
-/** The quick actions and settings search offers, and where each goes. */
+/**
+ * The quick actions and settings search offers, and where each goes. The
+ * settings are the connection's settings rows ([agentSettingsIndex], iOS's
+ * `SettingsIndex.computer`): one opens its page at the row, flashing it.
+ */
 @Composable
 private fun rememberSearchEntries(actions: AgentHomeActions): Pair<List<AgentSearchEntry>, List<AgentSearchEntry>> {
     val newChat = stringResource(R.string.session_new_chat)
     val add = stringResource(R.string.agent_search_add)
     val openSettings = stringResource(R.string.agent_search_open_settings)
-    val appearance = stringResource(R.string.settings_appearance)
-    val status = stringResource(R.string.settings_account_status)
-    val remove = stringResource(R.string.agent_settings_remove)
-    return remember(actions, newChat, add, openSettings, appearance, status, remove) {
+    val index = agentSettingsIndex()
+    return remember(actions, newChat, add, openSettings, index) {
         listOf(
             AgentSearchEntry("new-chat", newChat, Ionicon.CreateOutline, actions.onCompose),
             AgentSearchEntry("add", add, Ionicon.QrCodeOutline, actions.onAdd),
             AgentSearchEntry("settings", openSettings, Ionicon.SettingsOutline, actions.onSettings),
-        ) to listOf(
-            AgentSearchEntry("appearance", appearance, Ionicon.ColorPaletteOutline, actions.onAppearance),
-            AgentSearchEntry("status", status, Ionicon.LaptopOutline, actions.onSettings),
-            // Opens settings, where removing asks first; search never removes anything itself.
-            AgentSearchEntry("remove", remove, Ionicon.TrashOutline, actions.onSettings),
-        )
+        ) to index.map { row -> AgentSearchEntry(row.id, row.title, row.icon) { actions.onSettingsRow(row) } }
     }
 }
 
@@ -509,7 +507,7 @@ fun AgentHome(
     onOpenConversation: (agentId: String) -> Unit,
     onCompose: () -> Unit,
     onSettings: () -> Unit,
-    onAppearance: () -> Unit,
+    onSettingsRow: (AgentSettingsRow) -> Unit,
     onOpenArtifacts: () -> Unit = {},
     onOpenSurface: (AgentFeedRow.Surface) -> Unit = {},
 ) {
@@ -518,12 +516,12 @@ fun AgentHome(
     val feed by session.feed.collectAsStateWithLifecycle()
     val status by session.status.collectAsStateWithLifecycle()
     val add = LocalAddFlow.current
-    val actions = remember(graph, session, onOpenConversation, onCompose, onSettings, onAppearance, onOpenArtifacts, onOpenSurface, add) {
+    val actions = remember(graph, session, onOpenConversation, onCompose, onSettings, onSettingsRow, onOpenArtifacts, onOpenSurface, add) {
         AgentHomeActions(
             onOpenConversation = onOpenConversation,
             onCompose = onCompose,
             onSettings = onSettings,
-            onAppearance = onAppearance,
+            onSettingsRow = onSettingsRow,
             onSwitchAccount = { graph.open(it) },
             onAdd = { add?.scan() },
             onOpenArtifacts = onOpenArtifacts,

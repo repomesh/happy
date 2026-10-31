@@ -426,7 +426,7 @@ fun ChatFooter(controlledByUser: Boolean, modifier: Modifier = Modifier) {
                 Icon(Ionicon.InformationCircle, ChatListSpec.warningIcon, colors.boxWarning.text)
                 Text(
                     // Literal in happy-app (ChatFooter.tsx).
-                    text = "Permissions shown in terminal only. Reset or send a message to control from app.",
+                    text = stringResource(R.string.chat_permissions_in_terminal),
                     style = ChatListSpec.warningText,
                     color = colors.boxWarning.text,
                 )

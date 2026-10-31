@@ -32,4 +32,9 @@
     <string name="scan_torch_on">Encén la llanterna</string>
     <string name="scan_torch_off">Apaga la llanterna</string>
     <string name="state_animation_replay">Torna a reproduir</string>
+    <string name="scan_no_camera">Aquest dispositiu no té càmera. Enganxa l\'enllaç.</string>
+    <string name="scan_camera_failed">No s\'ha pogut iniciar la càmera. Torna-ho a provar o enganxa l\'enllaç.</string>
+    <string name="voice_microphone_title">Cal accés al micròfon</string>
+    <string name="voice_microphone_ask">Happy necessita accés al micròfon per al xat de veu. Concedeix el permís quan se\'t demani.</string>
+    <string name="voice_microphone_settings">Happy necessita accés al micròfon per al xat de veu. Activa l\'accés al micròfon a la configuració del dispositiu.</string>
 </resources>

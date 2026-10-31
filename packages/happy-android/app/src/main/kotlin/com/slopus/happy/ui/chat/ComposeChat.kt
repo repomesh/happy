@@ -1,5 +1,6 @@
 package com.slopus.happy.ui.chat
 
+import com.slopus.happy.text.words
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -180,8 +181,8 @@ class ComposeChat internal constructor(
                         if (rest.isNotBlank()) newSession.setInput("")
                     }
                     is StartResult.NotSent -> notices = result.notices.map { attachmentNoticeAlert(it, resources) }
-                    is StartResult.Refused -> alert = error(result.refusal.message)
-                    is StartResult.Failed -> alert = error(result.message)
+                    is StartResult.Refused -> alert = error(resources.getString(result.refusal.text))
+                    is StartResult.Failed -> alert = error(resources.words(result.message))
                     StartResult.Abandoned -> Unit
                 }
             } finally {

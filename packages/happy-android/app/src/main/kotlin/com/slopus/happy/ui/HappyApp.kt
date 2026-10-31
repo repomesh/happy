@@ -1,5 +1,6 @@
 package com.slopus.happy.ui
 
+import com.slopus.happy.ui.connection.openAgentSettingsRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import com.slopus.happy.ui.voice.LocalVoiceController
@@ -51,7 +52,6 @@ import com.slopus.happy.ui.machine.MachineRoute
 import com.slopus.happy.ui.onboarding.onboardingRoutes
 import com.slopus.happy.ui.connection.connectAgent
 import com.slopus.happy.ui.connection.agentConnectionRoutes
-import com.slopus.happy.ui.connection.AgentAppearanceRoute
 import com.slopus.happy.ui.connection.AgentConnectionSettingsRoute
 import com.slopus.happy.ui.connection.agentHomeRoutes
 import com.slopus.happy.ui.conversation.composeConversation
@@ -138,7 +138,7 @@ fun HappyApp(graph: AppGraph, onDarkThemeChange: (Boolean) -> Unit = {}) {
                                     onOpenConversation = { agentId -> nav.openConversation(id, agentId) },
                                     onCompose = { nav.composeConversation(id) },
                                     onSettings = { nav.navigate(AgentConnectionSettingsRoute(id)) },
-                                    onAppearance = { nav.navigate(AgentAppearanceRoute(id)) },
+                                    onSettingsRow = { row -> nav.openAgentSettingsRow(id, row) },
                                     onOpenArtifacts = { nav.navigate(AgentArtifactsRoute(id)) },
                                     onOpenSurface = { nav.navigate(AgentSurfaceRoute(id, it.id, it.type, it.name)) },
                                 )

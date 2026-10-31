@@ -199,7 +199,7 @@ fun UserMessage(
     }
     val alignment = if (fromOther) Alignment.Start else Alignment.End
     val statusText = when {
-        message.sendError != null -> stringResource(R.string.message_send_failed, message.sendError)
+        message.sendError != null -> stringResource(R.string.message_send_failed, message.sendError.ifEmpty { stringResource(R.string.chat_send_failed) })
         showPending && message.meta?.queuedWhileBusy == true -> stringResource(R.string.message_sends_after_this_turn)
         showPending -> stringResource(R.string.message_sending)
         else -> ""

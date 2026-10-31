@@ -1,5 +1,6 @@
 package com.slopus.happy.ui.artifacts
 
+import com.slopus.happy.conversation.Problem
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -159,7 +160,7 @@ class ArtifactScreensTest {
         state = ArtifactListState(emptyList(), null, loaded = true)
         rule.onNodeWithText("No artifacts yet.").assertExists()
         shot("artifacts-empty")
-        state = ArtifactListState(emptyList(), null, failed = true, loaded = true, reason = "Could not reach the agent.")
+        state = ArtifactListState(emptyList(), null, failed = true, loaded = true, reason = Problem.Said("Could not reach the agent."))
         rule.onNodeWithText("Could not reach the agent.").assertExists()
         shot("artifacts-failed")
         rule.onNodeWithText("Retry").performClick()

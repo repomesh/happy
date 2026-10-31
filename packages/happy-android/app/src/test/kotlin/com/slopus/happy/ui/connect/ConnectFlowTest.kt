@@ -117,10 +117,9 @@ class ConnectFlowTest {
         assertScanSays(ScanResult.Scanned("https://example.com"), "This QR code isn't a Happy code.")
         assertScanSays(ScanResult.Scanned("happy://something?else"), "This QR code isn't a Happy code.")
         assertScanSays(ScanResult.Scanned("happy://direct?abc"), "This code connects an agent. Use Add in the account menu on Home.")
-        assertScanSays(
-            ScanResult.Failed("Google Play services are not available"),
-            "The QR scanner isn't available on this device. Paste the link instead.",
-        )
+        assertScanSays(ScanResult.Failed(ScanFailure.Unavailable), "The QR scanner isn't available on this device. Paste the link instead.")
+        assertScanSays(ScanResult.Failed(ScanFailure.NoCamera), "This device has no camera. Paste the link instead.")
+        assertScanSays(ScanResult.Failed(ScanFailure.CameraFailed), "The camera couldn't start. Try again, or paste the link instead.")
         assertEquals(0, successes)
     }
 

@@ -221,10 +221,13 @@ internal fun rememberSupportAction(paywall: Paywall, onError: (String?) -> Unit)
 /** What About shows for this build, and Support us for this account's purchases. */
 @Composable
 internal fun rememberAboutInfo(graph: AppGraph): AboutInfo {
+    val resources = LocalResources.current
     val purchases by graph.purchases.purchases.collectAsStateWithLifecycle()
     return AboutInfo(
         versionName = versionDetail(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
-        versionSubtitle = buildSubtitle(BuildConfig.BUILD_COMMIT_SHA, BuildConfig.BUILD_COMMIT_TIMESTAMP),
+        versionSubtitle = buildSubtitle(BuildConfig.BUILD_COMMIT_SHA, BuildConfig.BUILD_COMMIT_TIMESTAMP, resources.getString(R.string.settings_commit)) {
+            resources.getString(R.string.settings_commit_at, it)
+        },
         isPro = BuildConfig.DEBUG || purchases.entitlements["pro"] == true,
     )
 }
@@ -362,8 +365,10 @@ private fun Account(graph: AppGraph, nav: NavHostController) {
     fun showSuccess(message: String) = alerts.show(Alert(successTitle, message, listOf(AlertButton(ok))))
 
     val context = LocalContext.current
-    val (deviceLabel, appLabel) = remember {
+    val resources = LocalResources.current
+    val (deviceLabel, appLabel) = remember(resources) {
         PushText.deviceLabels(
+            resources,
             // expo-device's deviceName: the user-set name, else the model.
             deviceName = Settings.Global.getString(context.contentResolver, "device_name") ?: Build.MODEL,
             modelName = Build.MODEL,
@@ -383,7 +388,7 @@ private fun Account(graph: AppGraph, nav: NavHostController) {
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            if (showErrors) showError("Failed to load push notification settings.")
+            if (showErrors) showError(resources.getString(R.string.push_load_failed))
         } finally {
             push = push.copy(loading = false)
         }
@@ -410,19 +415,19 @@ private fun Account(graph: AppGraph, nav: NavHostController) {
                     if (result.granted) {
                         pushRegistration.syncCurrentToken()
                         loadPush()
-                        showSuccess("Push notifications are enabled for this device.")
+                        showSuccess(resources.getString(R.string.push_enabled))
                     } else {
                         loadPush()
                         if (result.openedSettings) {
-                            alerts.show(Alert("Open Settings", "The system will not show the permission prompt again, so Happy opened Settings instead.", listOf(AlertButton(ok))))
+                            alerts.show(Alert(resources.getString(R.string.scan_open_settings), resources.getString(R.string.push_opened_settings), listOf(AlertButton(ok))))
                         } else {
-                            showError("Push notification permission was not granted.")
+                            showError(resources.getString(R.string.push_not_granted))
                         }
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
-                    showError("Failed to request push notification permission.")
+                    showError(resources.getString(R.string.push_request_failed))
                 } finally {
                     push = push.copy(requesting = false)
                 }
@@ -435,12 +440,12 @@ private fun Account(graph: AppGraph, nav: NavHostController) {
                     val result = pushRegistration.syncCurrentToken()
                     push = push.copy(permission = result.permission)
                     loadPush()
-                    if (result.permission.granted) showSuccess("This device push token was refreshed.")
-                    else showError("Push notifications are not enabled for this device yet.")
+                    if (result.permission.granted) showSuccess(resources.getString(R.string.push_refreshed))
+                    else showError(resources.getString(R.string.push_not_enabled))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
-                    showError("Failed to refresh this device push token.")
+                    showError(resources.getString(R.string.push_refresh_failed))
                 } finally {
                     push = push.copy(refreshing = false)
                 }
@@ -455,7 +460,7 @@ private fun Account(graph: AppGraph, nav: NavHostController) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
-                    showError("Failed to delete push token.")
+                    showError(resources.getString(R.string.push_delete_failed))
                 } finally {
                     push = push.copy(deletingToken = null)
                 }

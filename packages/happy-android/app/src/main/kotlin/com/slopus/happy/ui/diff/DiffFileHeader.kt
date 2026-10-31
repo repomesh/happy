@@ -1,5 +1,7 @@
 package com.slopus.happy.ui.diff
 
+import androidx.compose.ui.res.stringResource
+import com.slopus.happy.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -102,9 +104,9 @@ fun DiffFileHeader(
             if (title == null) Text(name, style = DiffHeaderSpec.name, color = palette.text, maxLines = 1)
         }
         when (file.kind) {
-            FileChangeKind.Added -> Badge("NEW", palette.markerAdd)
-            FileChangeKind.Deleted -> Badge("DELETED", palette.markerDel)
-            FileChangeKind.Renamed -> Badge("RENAMED", palette.textSecondary)
+            FileChangeKind.Added -> Badge(stringResource(R.string.diff_badge_new), palette.markerAdd)
+            FileChangeKind.Deleted -> Badge(stringResource(R.string.diff_badge_deleted), palette.markerDel)
+            FileChangeKind.Renamed -> Badge(stringResource(R.string.diff_badge_renamed), palette.textSecondary)
             else -> Unit
         }
         if (file.additions > 0) Text("+${file.additions}", style = DiffHeaderSpec.stat, color = palette.markerAdd)

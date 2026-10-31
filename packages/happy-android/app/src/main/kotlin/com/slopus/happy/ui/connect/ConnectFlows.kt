@@ -71,7 +71,7 @@ class ConnectFlow internal constructor(
             try {
                 when (val result = scanner.scan()) {
                     ScanResult.Cancelled -> Unit
-                    is ScanResult.Failed -> onUnavailable?.invoke() ?: run { alert = errorAlert(messages.unavailable) }
+                    is ScanResult.Failed -> onUnavailable?.invoke() ?: run { alert = errorAlert(messages.failure(result.reason)) }
                     is ScanResult.Scanned -> route(result.value)
                 }
             } finally {
@@ -138,13 +138,22 @@ enum class ConnectKind(val prefix: String) {
 /** What a scan that can't be approved here says. */
 internal data class ScanMessages(
     val unavailable: String = "",
+    val noCamera: String = "",
+    val cameraFailed: String = "",
     val notHappy: String = "",
     val terminalElsewhere: String = "",
     val accountElsewhere: String = "",
     val pairingUnavailable: String = "",
     val accountSignedOut: String = "",
     val invalidUrl: String = "",
-)
+) {
+    /** What a scan that couldn't run says, by [reason]. */
+    fun failure(reason: ScanFailure) = when (reason) {
+        ScanFailure.NoCamera -> noCamera
+        ScanFailure.CameraFailed -> cameraFailed
+        ScanFailure.Unavailable -> unavailable
+    }
+}
 
 /**
  * useConnectTerminal.ts: connects a terminal (the CLI or Happy Desktop) to
@@ -247,6 +256,8 @@ private fun rememberConnectFlow(
     flow.okTitle = ok
     flow.messages = ScanMessages(
         unavailable = stringResource(R.string.scan_unavailable),
+        noCamera = stringResource(R.string.scan_no_camera),
+        cameraFailed = stringResource(R.string.scan_camera_failed),
         notHappy = stringResource(R.string.scan_not_happy_code),
         terminalElsewhere = stringResource(R.string.scan_terminal_code_elsewhere),
         accountElsewhere = stringResource(R.string.scan_account_code_elsewhere),

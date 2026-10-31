@@ -28,4 +28,24 @@
     <string name="settings_could_not_save_profile">Impossibile salvare il profilo</string>
     <string name="settings_could_not_change_photo">Impossibile cambiare la foto</string>
     <string name="settings_could_not_remove_photo">Impossibile rimuovere la foto</string>
+    <string name="settings_agents_title">Agenti</string>
+    <string name="settings_agents_default">Predefinito (%1$s)</string>
+    <string name="settings_agents_use_code_default">Usa il valore del codice</string>
+    <string name="settings_agents_custom_model">Modello personalizzato…</string>
+    <string name="settings_agents_enter_model_id">Inserisci l\'ID esatto del modello</string>
+    <string name="settings_agents_no_machines">Nessuna macchina connessa</string>
+    <string name="settings_agents_no_machines_subtitle">Esegui Happy su un computer per connetterlo</string>
+    <string name="settings_agents_defaults">Predefiniti</string>
+    <string name="settings_agents_clear_overrides">Cancella le personalizzazioni</string>
+    <string name="settings_agents_clear_overrides_subtitle">Riporta tutti gli agenti ai valori del codice</string>
+    <string name="settings_agents_permission">Autorizzazioni</string>
+    <string name="settings_agents_model">Modello</string>
+    <string name="settings_agents_effort">Impegno</string>
+    <string name="settings_agents_custom_codex_title">Modello Codex personalizzato</string>
+    <string name="settings_agents_custom_codex_message">Inserisci l\'ID esatto del modello. La disponibilità dipende dal tuo account Codex o dalla configurazione dell\'API.</string>
+    <string name="settings_connect_claude_title">Connetti a Claude</string>
+    <string name="settings_connect_claude">Connetti Claude</string>
+    <string name="settings_connect_claude_run">Esegui questo comando nel terminale:</string>
+    <string name="settings_commit">Commit</string>
+    <string name="settings_commit_at">Commit %1$s</string>
 </resources>

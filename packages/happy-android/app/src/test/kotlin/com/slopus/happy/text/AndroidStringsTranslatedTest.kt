@@ -14,9 +14,9 @@ import javax.xml.parsers.DocumentBuilderFactory
  * each plural with the categories Android uses for that language. Nothing is
  * left in a locale that English no longer has.
  *
- * Exempt: strings.xml (generated, TranslationResourcesTest checks it) and
- * the files that keep happy-app's own inline English as happy-app does
- * (AGENTS.md, Localization): [ENGLISH_ONLY].
+ * Exempt: strings.xml, generated from happy-app's catalogs
+ * (TranslationResourcesTest checks it). Every strings_<area>.xml is
+ * translated, happy-app's inline English included (AGENTS.md, Localization).
  */
 class AndroidStringsTranslatedTest {
     private val res = File("src/main/res")
@@ -25,7 +25,7 @@ class AndroidStringsTranslatedTest {
         .map { it.name }
         .sorted()
 
-    private val sources = res.resolve("values").listFiles { file -> file.name.startsWith("strings_") && file.name !in ENGLISH_ONLY }!!
+    private val sources = res.resolve("values").listFiles { file -> file.name.startsWith("strings_") }!!
         .sortedBy { it.name }
 
     private class Entry(val placeholders: Set<String>, val quantities: Set<String>?)
@@ -56,7 +56,7 @@ class AndroidStringsTranslatedTest {
     @Test
     fun theLanguagesAreTheCatalogs() {
         assertEquals(listOf("values-b+zh+Hans", "values-b+zh+Hant", "values-ca", "values-es", "values-it", "values-ja", "values-pl", "values-pt", "values-ru"), locales)
-        assertTrue(sources.size >= 8)
+        assertTrue(sources.size >= 13)
     }
 
     @Test
@@ -92,9 +92,6 @@ class AndroidStringsTranslatedTest {
     }
 
     private companion object {
-        /** happy-app's inline English, kept English as happy-app keeps it (home's dock, the machine screen, tablet, push). */
-        val ENGLISH_ONLY = setOf("strings_home.xml", "strings_tablet.xml", "strings_push.xml")
-
         /** Android's plural categories per language, as generate.mjs writes them. */
         val QUANTITIES = mapOf(
             "values-ru" to setOf("one", "few", "many", "other"),

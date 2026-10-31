@@ -134,7 +134,7 @@ fun EmptyMessages(
             when {
                 !hasMoreOlder -> Text(
                     // Literal in happy-app (EmptyMessages.tsx).
-                    "No messages yet",
+                    stringResource(R.string.chat_no_messages),
                     style = ChatScreenSpec.emptyNoMessages,
                     color = colors.textSecondary,
                     textAlign = TextAlign.Center,
@@ -157,7 +157,7 @@ fun EmptyMessages(
         }
         Text(
             // "Created" is literal in happy-app (EmptyMessages.tsx).
-            "Created ${formatRelativeTime(resources, session.session.createdAt, now)}",
+            stringResource(R.string.chat_created, formatRelativeTime(resources, session.session.createdAt, now)),
             style = ChatScreenSpec.emptyCreated,
             color = colors.textSecondary,
             textAlign = TextAlign.Center,

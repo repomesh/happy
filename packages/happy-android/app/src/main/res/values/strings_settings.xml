@@ -32,4 +32,30 @@
     <string name="settings_could_not_save_profile">Could not save your profile</string>
     <string name="settings_could_not_change_photo">Could not change your photo</string>
     <string name="settings_could_not_remove_photo">Could not remove your photo</string>
+
+    <!-- Settings › Agents (settings/agents.tsx, English inline there). -->
+    <string name="settings_agents_title">Agents</string>
+    <string name="settings_agents_default">Default (%1$s)</string>
+    <string name="settings_agents_use_code_default">Use code default</string>
+    <string name="settings_agents_custom_model">Custom model…</string>
+    <string name="settings_agents_enter_model_id">Enter an exact model ID</string>
+    <string name="settings_agents_no_machines">No connected machines</string>
+    <string name="settings_agents_no_machines_subtitle">Run Happy on a computer to connect it</string>
+    <string name="settings_agents_defaults">Defaults</string>
+    <string name="settings_agents_clear_overrides">Clear Overrides</string>
+    <string name="settings_agents_clear_overrides_subtitle">Return every agent to code defaults</string>
+    <string name="settings_agents_permission">Permission</string>
+    <string name="settings_agents_model">Model</string>
+    <string name="settings_agents_effort">Effort</string>
+    <string name="settings_agents_custom_codex_title">Custom Codex model</string>
+    <string name="settings_agents_custom_codex_message">Enter an exact model ID. Availability depends on your Codex account or API configuration.</string>
+
+    <!-- settings/connect/claude.tsx. -->
+    <string name="settings_connect_claude_title">Connect to Claude</string>
+    <string name="settings_connect_claude">Connect Claude</string>
+    <string name="settings_connect_claude_run">Run the following command in your terminal:</string>
+
+    <!-- formatBuildSubtitle: the build's commit under Version. -->
+    <string name="settings_commit">Commit</string>
+    <string name="settings_commit_at">Commit %1$s</string>
 </resources>

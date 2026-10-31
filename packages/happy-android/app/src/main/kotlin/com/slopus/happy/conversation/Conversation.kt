@@ -50,7 +50,7 @@ data class ComposerTaken(val serial: Int, val text: String)
 
 /** New work that could not be made: nothing was sent, and the composer keeps everything. */
 @Immutable
-data class WorkFailure(val kind: WorkKind, val reason: String)
+data class WorkFailure(val kind: WorkKind, val reason: Problem)
 
 /** Everything a conversation screen draws. [rows] are newest first. */
 @Immutable
@@ -81,9 +81,9 @@ data class ConversationState(
     val answering: Boolean = false,
     val stopping: Boolean = false,
     /** Why history could not be read. */
-    val error: String? = null,
+    val error: Problem? = null,
     /** A refused action, shown once. */
-    val alert: String? = null,
+    val alert: Problem? = null,
     /** What home calls this conversation, so the screen has its name before the computer is asked. */
     val knownTitle: String? = null,
     /** A new chat's Task or Bot and name; null once it is made. */
@@ -129,7 +129,7 @@ class Conversation(
     private val draftDebounceMillis: Long = 300,
     private val retryDelayMillis: Long = 600,
 ) {
-    private class Outgoing(val id: String, val text: String, val images: List<Block.Image>, var accepted: Boolean = false, var failure: String? = null)
+    private class Outgoing(val id: String, val text: String, val images: List<Block.Image>, var accepted: Boolean = false, var failure: Problem? = null)
 
     private val _state = MutableStateFlow(
         ConversationState(
@@ -457,7 +457,7 @@ class Conversation(
             } catch (e: Exception) {
                 val restore = draft.isBlank() && trimmed.isNotEmpty()
                 if (restore) setDraftNow(trimmed)
-                publish { it.copy(draftArrivals = it.draftArrivals + if (restore) 1 else 0, alert = "Couldn't read the pictures to send.") }
+                publish { it.copy(draftArrivals = it.draftArrivals + if (restore) 1 else 0, alert = Problem.PicturesUnreadable) }
                 return@launch
             }
             outgoing += Outgoing(id, trimmed, images)
@@ -481,7 +481,7 @@ class Conversation(
             val images = try {
                 pictures()
             } catch (e: Exception) {
-                publish { it.copy(alert = "Couldn't read the pictures to send.") }
+                publish { it.copy(alert = Problem.PicturesUnreadable) }
                 return@launch
             }
             val kind = choice.kind
@@ -872,11 +872,11 @@ class Conversation(
             else -> false
         }
 
-        /** What a person reads for a failure. */
-        fun describe(e: Exception): String = when (e) {
-            is AgentConnectionException -> e.reason.message
-            is ConversationApiException -> e.message?.takeIf { it.isNotBlank() } ?: "The agent refused this (${e.status})."
-            else -> e.message?.takeIf { it.isNotBlank() } ?: "Something went wrong."
+        /** Why [e] happened, for the person: the agent's own words where it gave some. */
+        fun describe(e: Exception): Problem = when (e) {
+            is AgentConnectionException -> Problem.Link(e.reason)
+            is ConversationApiException -> e.message?.takeIf { it.isNotBlank() }?.let(Problem::Said) ?: Problem.Refused(e.status)
+            else -> e.message?.takeIf { it.isNotBlank() }?.let(Problem::Said) ?: Problem.Unknown
         }
 
         /**

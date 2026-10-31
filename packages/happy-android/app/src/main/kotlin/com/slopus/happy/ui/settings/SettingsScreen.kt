@@ -72,7 +72,7 @@ fun ProfileAvatar(profile: Profile, size: Dp) {
  * formatBuildSubtitle: "Commit 2026-10-16 03:12 UTC / abc1234" from the
  * build's commit, either part optional; null without both.
  */
-fun buildSubtitle(commitSha: String?, commitTimestamp: String?): String? {
+fun buildSubtitle(commitSha: String?, commitTimestamp: String?, commit: String = "Commit", commitAt: (String) -> String = { "Commit $it" }): String? {
     val time = commitTimestamp?.takeIf { it.isNotEmpty() }?.let { value ->
         try {
             OffsetDateTime.parse(value).withOffsetSameInstant(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'"))
@@ -82,7 +82,7 @@ fun buildSubtitle(commitSha: String?, commitTimestamp: String?): String? {
     }
     val sha = commitSha?.takeIf { it.isNotEmpty() }?.take(7)
     if (time == null && sha == null) return null
-    return listOfNotNull(if (time != null) "Commit $time" else "Commit", sha).joinToString(" / ")
+    return listOfNotNull(if (time != null) commitAt(time) else commit, sha).joinToString(" / ")
 }
 
 /** Everything a Happy account's Settings asks of the app. */

@@ -93,4 +93,17 @@
     <string name="conversation_mode_permission_item">権限: %1$s</string>
     <string name="conversation_pictures_too_large_title">画像が大きすぎます</string>
     <string name="conversation_pictures_too_large_message">これらの画像は合わせると 1 通のメッセージに収まりません。いくつか削除してもう一度送信してください。</string>
+    <string name="conversation_problem_refused">エージェントが拒否しました（%1$d）。</string>
+    <string name="conversation_problem_unknown">問題が発生しました。</string>
+    <string name="conversation_problem_pictures">送信する画像を読み込めませんでした。</string>
+    <string name="conversation_failure_signin_missing">%1$s にサインインしていません。`%2$s` を実行してから再試行してください。</string>
+    <string name="conversation_failure_cannot_authenticate">%1$s で認証できませんでした。サインイン設定を確認してから再試行してください。</string>
+    <string name="conversation_failure_usage_limit">%1$s の利用上限に達しました。</string>
+    <string name="conversation_failure_no_account">「%1$s」のすべてのアカウントが利用上限に達しました。</string>
+    <string name="conversation_failure_rate_limited">%1$s のレート制限中です。1分後にもう一度お試しください。</string>
+    <string name="conversation_failure_provider_unavailable">%1$s は現在混み合っています。しばらくしてからもう一度お試しください。</string>
+    <string name="conversation_failure_network">%1$s に接続できませんでした。接続を確認してから再試行してください。</string>
+    <string name="conversation_failure_context_too_long">この会話はリセット後も %1$s には長すぎます。</string>
+    <string name="conversation_failure_provider_disabled">%1$s はオフになっています。設定でオンにしてから再試行してください。</string>
+    <string name="conversation_failure_internal">問題が発生しました: %1$s</string>
 </resources>

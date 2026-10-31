@@ -33,4 +33,9 @@
     <string name="scan_torch_on">Включить фонарик</string>
     <string name="scan_torch_off">Выключить фонарик</string>
     <string name="state_animation_replay">Воспроизвести снова</string>
+    <string name="scan_no_camera">На этом устройстве нет камеры. Вставьте ссылку.</string>
+    <string name="scan_camera_failed">Не удалось запустить камеру. Попробуйте снова или вставьте ссылку.</string>
+    <string name="voice_microphone_title">Нужен доступ к микрофону</string>
+    <string name="voice_microphone_ask">Happy нужен доступ к микрофону для голосового чата. Разрешите его, когда появится запрос.</string>
+    <string name="voice_microphone_settings">Happy нужен доступ к микрофону для голосового чата. Включите доступ к микрофону в настройках устройства.</string>
 </resources>

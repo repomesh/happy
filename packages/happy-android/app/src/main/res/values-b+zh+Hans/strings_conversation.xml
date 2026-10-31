@@ -93,4 +93,17 @@
     <string name="conversation_mode_permission_item">权限：%1$s</string>
     <string name="conversation_pictures_too_large_title">图片太大</string>
     <string name="conversation_pictures_too_large_message">这些图片加起来超出了一条消息的容量。请移除一些后再发送。</string>
+    <string name="conversation_problem_refused">代理拒绝了此操作（%1$d）。</string>
+    <string name="conversation_problem_unknown">出了点问题。</string>
+    <string name="conversation_problem_pictures">无法读取要发送的图片。</string>
+    <string name="conversation_failure_signin_missing">%1$s 未登录。请运行 `%2$s`，然后重试。</string>
+    <string name="conversation_failure_cannot_authenticate">%1$s 无法完成身份验证。请检查其登录设置，然后重试。</string>
+    <string name="conversation_failure_usage_limit">已达到 %1$s 的使用上限。</string>
+    <string name="conversation_failure_no_account">“%1$s”中的所有账号都已用完额度。</string>
+    <string name="conversation_failure_rate_limited">%1$s 已限速。请一分钟后重试。</string>
+    <string name="conversation_failure_provider_unavailable">%1$s 当前过载。请稍后重试。</string>
+    <string name="conversation_failure_network">无法连接 %1$s。请检查网络连接，然后重试。</string>
+    <string name="conversation_failure_context_too_long">即使重置后，这个对话对 %1$s 来说也太长了。</string>
+    <string name="conversation_failure_provider_disabled">%1$s 已关闭。请在设置中开启，然后重试。</string>
+    <string name="conversation_failure_internal">出了点问题：%1$s</string>
 </resources>

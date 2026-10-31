@@ -218,8 +218,7 @@ private fun BotsSection(sessions: List<SessionRowData>, callbacks: HomeListCallb
                     bottom = HomeSpec.sectionPaddingBottom,
                 ),
         ) {
-            // SessionsList spells it out in English.
-            Text("Bots", style = HomeSpec.sectionHeader, color = colors.grouped.sectionTitle)
+            Text(stringResource(R.string.sidebar_bots), style = HomeSpec.sectionHeader, color = colors.grouped.sectionTitle)
         }
         sessions.forEachIndexed { index, session ->
             FlatSessionRow(

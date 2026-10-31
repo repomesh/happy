@@ -308,9 +308,9 @@ private fun PrimaryButton(action: PrimaryAction, aborting: Boolean, onClick: () 
     val enabled = action != PrimaryAction.Idle
     // Literal in happy-app (AgentInput.tsx accessibilityLabel).
     val label = when (action) {
-        PrimaryAction.Stop -> "Stop"
-        PrimaryAction.Voice -> "Voice"
-        else -> "Send"
+        PrimaryAction.Stop -> stringResource(R.string.chat_stop)
+        PrimaryAction.Voice -> stringResource(R.string.chat_voice)
+        else -> stringResource(R.string.chat_send)
     }
     Box(
         modifier = Modifier

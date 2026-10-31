@@ -24,6 +24,7 @@ import com.slopus.happy.ui.PHONE
 import com.slopus.happy.ui.components.PromptTags
 import com.slopus.happy.ui.connect.LocalQrScanner
 import com.slopus.happy.ui.connect.QrScanner
+import com.slopus.happy.ui.connect.ScanFailure
 import com.slopus.happy.ui.connect.ScanResult
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -92,7 +93,7 @@ class LinkFromEmptyHomeTest {
 
     @Test
     fun withoutAScannerItAsksForTheLinkAndCancelKeepsHome() {
-        scan = ScanResult.Failed("no camera")
+        scan = ScanResult.Failed(ScanFailure.NoCamera)
         rule.onNodeWithText("Scan QR code").performClick()
         rule.waitUntilAtLeastOneExists(hasTestTag(PromptTags.INPUT), 5_000)
         rule.onNodeWithTag(PromptTags.CANCEL).performClick()

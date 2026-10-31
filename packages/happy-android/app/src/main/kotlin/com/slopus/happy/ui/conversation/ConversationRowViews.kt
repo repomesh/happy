@@ -201,9 +201,9 @@ fun ConversationRowView(row: ConversationRow, bubble: BubblePalette, actions: Co
 
 @Composable
 private fun UserRow(row: ConversationRow.User, bubble: BubblePalette, actions: ConversationRowActions, modifier: Modifier) {
-    val failed = row.delivery as? Delivery.Failed
+    val failed = (row.delivery as? Delivery.Failed)?.let { problemText(it.reason) }
     // A send waiting behind a running turn reads "Sends after this turn"; one on its way, "Sending…".
-    val message = remember(row) {
+    val message = remember(row, failed) {
         ChatMessage.UserText(
             id = row.key,
             localId = row.messageId,
@@ -211,7 +211,7 @@ private fun UserRow(row: ConversationRow.User, bubble: BubblePalette, actions: C
             text = row.text,
             meta = if (row.delivery == Delivery.Pending) MessageMeta(buildJsonObject { put("queuedWhileBusy", JsonPrimitive(true)) }) else null,
             pending = row.delivery == Delivery.Sending || row.delivery == Delivery.Pending,
-            sendError = failed?.reason,
+            sendError = failed,
         )
     }
     // The photos go under the words, against the right edge as the bubble is.
@@ -475,7 +475,7 @@ private fun FailureRow(row: ConversationRow.Failure, actions: ConversationRowAct
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Ionicon.AlertCircleOutline, 18.dp, colors.textDestructive)
-            Text(row.reason, style = ConversationRowSpec.body, color = colors.textDestructive, modifier = Modifier.weight(1f))
+            Text(failureText(row.reason), style = ConversationRowSpec.body, color = colors.textDestructive, modifier = Modifier.weight(1f))
         }
         when {
             row.resolved -> Text(stringResource(R.string.conversation_failure_resolved), style = ConversationRowSpec.label, color = colors.textSecondary)

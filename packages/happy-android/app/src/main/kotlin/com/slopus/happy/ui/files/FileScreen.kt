@@ -1,5 +1,7 @@
 package com.slopus.happy.ui.files
 
+import com.slopus.happy.text.wordsResource
+import com.slopus.happy.text.Words
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -77,7 +79,7 @@ object FileTags {
 /** What file.tsx loaded: still loading, failed, binary, or the text and its uncommitted diff. */
 sealed interface FileLoad {
     data object Loading : FileLoad
-    data class Failed(val message: String) : FileLoad
+    data class Failed(val message: Words) : FileLoad
     data object Binary : FileLoad
     data class Loaded(val content: String, val diff: String?) : FileLoad
 }
@@ -137,7 +139,7 @@ suspend fun SessionFileOps.loadFile(sessionId: String, filePath: String, session
         }
         val response = readFile(sessionId, filePath)
         val content = response.content
-        if (!response.success || content.isNullOrEmpty()) return FileLoad.Failed(response.error ?: "Failed to read file")
+        if (!response.success || content.isNullOrEmpty()) return FileLoad.Failed(Words.said(response.error, R.string.files_failed_to_read))
         val bytes = try {
             java.util.Base64.getMimeDecoder().decode(content)
         } catch (_: IllegalArgumentException) {
@@ -150,7 +152,7 @@ suspend fun SessionFileOps.loadFile(sessionId: String, filePath: String, session
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {
-        FileLoad.Failed("Failed to load file")
+        FileLoad.Failed(Words.ours(R.string.files_load_failed))
     }
 }
 
@@ -233,10 +235,10 @@ fun FileScreen(
                 Text(stringResource(R.string.files_loading_file, fileName), style = happyTextStyle(fontSize = 16), color = colors.textSecondary, modifier = Modifier.padding(top = 16.dp))
             }
             is FileLoad.Failed -> {
-                Centered(stringResource(R.string.common_error), colors.textDestructive, load.message)
+                Centered(stringResource(R.string.common_error), colors.textDestructive, wordsResource(load.message))
                 if (alertShown) {
                     HappyAlert(
-                        Alert(stringResource(R.string.common_error), load.message, listOf(AlertButton(stringResource(R.string.common_ok)))),
+                        Alert(stringResource(R.string.common_error), wordsResource(load.message), listOf(AlertButton(stringResource(R.string.common_ok)))),
                         onDismiss = { alertShown = false },
                     )
                 }

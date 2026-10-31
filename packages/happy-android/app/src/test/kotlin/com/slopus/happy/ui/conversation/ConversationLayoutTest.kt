@@ -38,6 +38,7 @@ import com.slopus.happy.conversation.Mode
 import com.slopus.happy.conversation.ModeCatalog
 import com.slopus.happy.conversation.ModelChoice
 import com.slopus.happy.conversation.Presentation
+import com.slopus.happy.conversation.Problem
 import com.slopus.happy.conversation.Question
 import com.slopus.happy.chat.markdown.parseMarkdown
 import com.slopus.happy.ui.PHONE
@@ -273,7 +274,7 @@ class ConversationLayoutTest {
 
     @Test fun `a failed send offers retry and discard`() {
         val retries = ArrayList<String>()
-        val failed = ConversationRow.User("x:user", "x", "Hello", parseMarkdown("Hello"), emptyList(), Delivery.Failed("Unknown model."))
+        val failed = ConversationRow.User("x:user", "x", "Hello", parseMarkdown("Hello"), emptyList(), Delivery.Failed(Problem.Said("Unknown model.")))
         show(
             ConversationState(created = true, loaded = true, rows = listOf(failed), agent = agent),
             actions = ConversationScreenActions(onRetrySend = { retries += it }),
@@ -342,7 +343,7 @@ class ConversationLayoutTest {
     }
 
     @Test fun `a chat that could not be read says why`() {
-        show(ConversationState(created = true, loaded = true, error = "Could not reach the agent."))
+        show(ConversationState(created = true, loaded = true, error = Problem.Said("Could not reach the agent.")))
         rule.node(ConversationScreenTags.ERROR).assertIsDisplayed()
         shot("error")
     }

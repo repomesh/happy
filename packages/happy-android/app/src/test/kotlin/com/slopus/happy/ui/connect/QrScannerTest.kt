@@ -47,7 +47,7 @@ class QrScannerTest {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         shadowOf(context.packageManager).setSystemFeature(PackageManager.FEATURE_CAMERA_ANY, false)
         val result = runBlocking { CameraQrScanner(context).scan() }
-        assertTrue(result is ScanResult.Failed)
+        assertEquals(ScanResult.Failed(ScanFailure.NoCamera), result)
     }
 
     @Test
@@ -58,10 +58,14 @@ class QrScannerTest {
             contract.parseResult(Activity.RESULT_OK, Intent().putExtra(QrScannerActivity.EXTRA_VALUE, "happy://terminal?abc")),
         )
         assertEquals(ScanResult.Cancelled, contract.parseResult(Activity.RESULT_CANCELED, null))
-        assertEquals(
-            ScanResult.Failed("no camera"),
-            contract.parseResult(QrScannerActivity.RESULT_FAILED, Intent().putExtra(QrScannerActivity.EXTRA_FAILURE, "no camera")),
-        )
+        for (reason in ScanFailure.entries) {
+            assertEquals(
+                ScanResult.Failed(reason),
+                contract.parseResult(QrScannerActivity.RESULT_FAILED, Intent().putExtra(QrScannerActivity.EXTRA_FAILURE, reason.name)),
+            )
+        }
+        // A failure the activity didn't name is the camera's.
+        assertEquals(ScanResult.Failed(ScanFailure.CameraFailed), contract.parseResult(QrScannerActivity.RESULT_FAILED, null))
     }
 
     /** Refusing the camera leaves the scanner open, saying why, with the way to settings; back cancels. */

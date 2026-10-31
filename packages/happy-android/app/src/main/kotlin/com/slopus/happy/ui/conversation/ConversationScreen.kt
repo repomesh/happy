@@ -325,7 +325,7 @@ fun ConversationScreen(
                     )
                     TranscriptPhase.Failed -> StatePage(
                         title = stringResource(R.string.conversation_load_failed),
-                        body = state.error,
+                        body = state.error?.let { problemText(it) },
                         icon = Ionicon.CloudOfflineOutline,
                         action = stringResource(R.string.common_retry) to actions.onRetryLoad,
                         tag = ConversationScreenTags.ERROR,

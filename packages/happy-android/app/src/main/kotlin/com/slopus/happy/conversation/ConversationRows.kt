@@ -17,7 +17,7 @@ sealed interface Delivery {
     data object Sending : Delivery
     /** Taken, waiting for a run to accept it. */
     data object Pending : Delivery
-    data class Failed(val reason: String) : Delivery
+    data class Failed(val reason: Problem) : Delivery
 }
 
 /** One item of a tool's `media` presentation, addressed for `…/tool-calls/:id/media/:index`. */
@@ -79,7 +79,7 @@ sealed interface ConversationRow {
     data class Collaborator(override val key: String, val senderAgentId: String, val text: String, val blocks: List<MarkdownBlock>) : ConversationRow
 
     /** A turn that failed, with Retry while it can help and nobody acted on it yet. */
-    data class Failure(override val key: String, val messageId: String, val reason: String, val retryable: Boolean, val resolved: Boolean) : ConversationRow
+    data class Failure(override val key: String, val messageId: String, val reason: FailureReason, val retryable: Boolean, val resolved: Boolean) : ConversationRow
 
     /** One line of housekeeping worth showing (a compaction). */
     data class Notice(override val key: String, val kind: NoticeKind) : ConversationRow
@@ -185,7 +185,10 @@ class ConversationRowBuilder {
             val failure = message.failure
             val written = failure?.let(::reason)
             val text = message.text.trim()
-            val reason = written ?: text.ifEmpty { failure?.get("message").str ?: "Something went wrong." }
+            val reason = written
+                ?: text.ifEmpty { null }?.let(FailureReason::Said)
+                ?: failure?.get("message").str?.let(FailureReason::Said)
+                ?: FailureReason.Unknown
             return ConversationRow.Failure(
                 key = "${message.id}:failure",
                 messageId = message.id,
@@ -195,8 +198,8 @@ class ConversationRowBuilder {
             )
         }
 
-        /** Desktop's `conversationFailureMessage`, without clock times; null where the daemon's words stand. */
-        private fun reason(failure: JsonObject): String? {
+        /** Desktop's `conversationFailureMessage` as a case; null where the daemon's words stand. */
+        private fun reason(failure: JsonObject): FailureReason? {
             val provider = failure["provider"].obj
             val vendor = provider?.get("vendorName").str
             val label = provider?.get("label").str
@@ -204,18 +207,18 @@ class ConversationRowBuilder {
                 "signin_missing" -> label?.let {
                     val command = failure["command"].str
                     val product = failure["product"].str
-                    if (command != null && product != null) "$product isn't signed in. Run `$command`, then retry."
-                    else "$it couldn't authenticate. Check its sign-in settings, then retry."
+                    if (command != null && product != null) FailureReason.SignInMissing(product, command)
+                    else FailureReason.CannotAuthenticate(it)
                 }
-                "usage_limit" -> vendor?.let { "$it usage limit reached." }
-                "no_account_available" -> failure["poolName"].str?.let { "Every account in “$it” is out of usage." }
-                "rate_limited" -> vendor?.let { "$it is rate-limited. Try again in a minute." }
-                "provider_unavailable" -> vendor?.let { "$it is overloaded right now. Try again in a moment." }
-                "network" -> vendor?.let { "Couldn't reach $it. Check your connection, then retry." }
-                "context_too_long" -> failure["modelId"].str?.let { "This conversation is too long for $it, even after a reset." }
-                "provider_disabled" -> label?.let { "$it is turned off. Turn it on in Settings, then retry." }
-                "internal" -> failure["detail"].str?.let { "Something went wrong: $it" }
-                else -> failure["message"].str
+                "usage_limit" -> vendor?.let(FailureReason::UsageLimit)
+                "no_account_available" -> failure["poolName"].str?.let(FailureReason::NoAccountAvailable)
+                "rate_limited" -> vendor?.let(FailureReason::RateLimited)
+                "provider_unavailable" -> vendor?.let(FailureReason::ProviderUnavailable)
+                "network" -> vendor?.let(FailureReason::Network)
+                "context_too_long" -> failure["modelId"].str?.let(FailureReason::ContextTooLong)
+                "provider_disabled" -> label?.let(FailureReason::ProviderDisabled)
+                "internal" -> failure["detail"].str?.let(FailureReason::Internal)
+                else -> failure["message"].str?.let(FailureReason::Said)
             }
         }
     }

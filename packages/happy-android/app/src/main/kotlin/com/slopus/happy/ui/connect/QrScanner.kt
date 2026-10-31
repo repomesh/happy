@@ -18,8 +18,20 @@ sealed interface ScanResult {
     data class Scanned(val value: String) : ScanResult
     data object Cancelled : ScanResult
 
-    /** No camera on this device, or it failed. */
-    data class Failed(val reason: String) : ScanResult
+    /** No camera on this device, or it failed: [reason] says which, the flows say it in words. */
+    data class Failed(val reason: ScanFailure) : ScanResult
+}
+
+/** Why a scan couldn't run. */
+enum class ScanFailure {
+    /** The device has no camera at all. */
+    NoCamera,
+
+    /** The camera is there but couldn't be opened or started. */
+    CameraFailed,
+
+    /** The scanner screen itself couldn't be opened. */
+    Unavailable,
 }
 
 /**
@@ -44,9 +56,9 @@ class CameraQrScanner(private val context: Context) : QrScanner {
 
     override suspend fun scan(): ScanResult {
         if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
-            return ScanResult.Failed("This device has no camera")
+            return ScanResult.Failed(ScanFailure.NoCamera)
         }
-        val launcher = launcher ?: return ScanResult.Failed("Scanner unavailable")
+        val launcher = launcher ?: return ScanResult.Failed(ScanFailure.Unavailable)
         val result = CompletableDeferred<ScanResult>()
         pending?.complete(ScanResult.Cancelled)
         pending = result
@@ -55,7 +67,7 @@ class CameraQrScanner(private val context: Context) : QrScanner {
         } catch (e: ActivityNotFoundException) {
             Log.w(TAG, "QR scanner unavailable", e)
             pending = null
-            return ScanResult.Failed(e.message ?: "Scanner unavailable")
+            return ScanResult.Failed(ScanFailure.Unavailable)
         }
         return try {
             result.await()

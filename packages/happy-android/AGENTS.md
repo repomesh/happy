@@ -211,7 +211,10 @@ win:
   that page with `reveal` in its route: it scrolls the row to the middle and
   flashes it (`ProvideRowReveal`, `Modifier.revealRow`). A new row on such
   a page goes in its `*PageEntries` too; `SettingsSearchTest` checks they
-  agree.
+  agree. An agent's home search finds its Settings rows the same way, from
+  `agentSettingsIndex()` (iOS's `SettingsIndex.computer`):
+  `openAgentSettingsRow` opens the agent's Settings or Appearance page with
+  `reveal`, or Chief of Staff with the ask for name and avatar.
 - **QR codes:** every scan is classified (terminal, account, agent
   connection, or not ours) and routed. A code the screen can't use shows an
   error; nothing is silently ignored. Scanning works while signed in.
@@ -274,14 +277,24 @@ literal examples (`Happy`, `Happy Cloud`, `Chief of Staff`, `deploy-api`) are
 Where happy-app calls `t()`, use the catalog key; never re-type its English.
 Where happy-app writes English inline instead (most of HomeDock, the machine
 screen, info.tsx's activity rows, the agents and push-diagnostics settings,
-useStartSessionFromDraft's errors), the port stays English too: on screens, in
-`strings_home.xml`, `strings_tablet.xml` and `strings_push.xml` (the test's
-English-only files) or inline with a note naming the happy-app file. Text built outside composition stays a Kotlin literal, word for
-word as happy-app has it: tool titles (`chat/tools`), slash-command
-descriptions (`autocomplete`), reducer events, spawn, worktree and changes
-errors, and the push diagnostics in `model/settings/Push.kt`. So do brand and
-product names ("Claude Code", "OpenAI Codex", "Happy Engineering"). When
-happy-app moves one of these into its catalogs, switch to the key.
+useStartSessionFromDraft's errors), the port takes its words into
+`strings_<area>.xml` (`strings_home.xml`, `strings_tablet.xml`,
+`strings_push.xml`, `strings_chat.xml`…) and translates them like any other
+Android string. No file is English-only.
+
+Text decided outside composition is not English either: it is a typed
+reason the screen resolves with `stringResource`. A conversation's errors and
+alerts are a `Problem`, an agent turn's failure a `FailureReason`
+(`ui/conversation/ProblemText.kt` words both), a scan's a `ScanFailure`,
+a start refusal carries `StartRefusal.text`, and spawn, worktree, bot name
+and changes errors are `Words` (`text/Words.kt`): `Words.Ours` for our
+sentence, `Words.Said` for what the server, daemon or git said, shown as it
+came. Raw agent, daemon and server messages are never translated, but our
+wrapper around them is. What stays a Kotlin literal: tool titles
+(`chat/tools`), slash-command descriptions (`autocomplete`), reducer events,
+the developer-only voice diagnostics, and brand and product names ("Claude
+Code", "OpenAI Codex", "Happy Engineering"). When happy-app moves one of these
+into its catalogs, switch to the key.
 
 How a catalog entry becomes a resource:
 

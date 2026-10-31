@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -299,8 +300,8 @@ private fun ConversationEntry(graph: AppGraph, nav: NavHostController, route: Co
         )
     }
     // New work that could not be made says why; nothing was sent, and the composer keeps it all.
-    val message = state.alert ?: state.workFailure?.let { failure ->
-        stringResource(if (failure.kind == WorkKind.Bot) R.string.new_work_bot_failed else R.string.new_work_task_failed, failure.reason)
+    val message = state.alert?.let { problemText(it) } ?: state.workFailure?.let { failure ->
+        stringResource(if (failure.kind == WorkKind.Bot) R.string.new_work_bot_failed else R.string.new_work_task_failed, problemText(failure.reason))
     }
     message?.let {
         val title = stringResource(R.string.common_error)
@@ -313,7 +314,8 @@ private fun ConversationEntry(graph: AppGraph, nav: NavHostController, route: Co
 private fun ConversationDetails(graph: AppGraph, nav: NavHostController, route: ConversationDetailsRoute) {
     val session = remember(route.connectionId) { graph.agentSessions.session(route.connectionId) }
     val unavailable = stringResource(R.string.conversation_unavailable)
-    val read by produceState<Triple<AgentInfo?, Mode?, String?>>(Triple(null, null, null), session, route.agentId) {
+    val resources = LocalResources.current
+    val read by produceState<Triple<AgentInfo?, Mode?, String?>>(Triple(null, null, null), session, route.agentId, resources) {
         value = if (session == null) {
             Triple(null, null, unavailable)
         } else {
@@ -323,7 +325,7 @@ private fun ConversationDetails(graph: AppGraph, nav: NavHostController, route: 
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Triple(null, null, Conversation.describe(e))
+                Triple(null, null, resources.problemText(Conversation.describe(e)))
             }
         }
     }
@@ -343,6 +345,7 @@ private fun ChiefOfStaffEntry(graph: AppGraph, nav: NavHostController, route: Ch
     val missing = stringResource(R.string.conversation_chief_missing)
     val unavailable = stringResource(R.string.conversation_unavailable)
     var attempt by rememberSaveable { mutableIntStateOf(0) }
+    val resources = LocalResources.current
     var problem by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(session, attempt) {
         problem = null
@@ -355,7 +358,7 @@ private fun ChiefOfStaffEntry(graph: AppGraph, nav: NavHostController, route: Ch
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            problem = Conversation.describe(e)
+            problem = resources.problemText(Conversation.describe(e))
             return@LaunchedEffect
         }
         if (agentId == null) {

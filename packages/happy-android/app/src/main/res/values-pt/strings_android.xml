@@ -32,4 +32,9 @@
     <string name="scan_torch_on">Ligar a lanterna</string>
     <string name="scan_torch_off">Desligar a lanterna</string>
     <string name="state_animation_replay">Reproduzir de novo</string>
+    <string name="scan_no_camera">Este dispositivo não tem câmera. Cole o link.</string>
+    <string name="scan_camera_failed">Não foi possível iniciar a câmera. Tente de novo ou cole o link.</string>
+    <string name="voice_microphone_title">Acesso ao microfone necessário</string>
+    <string name="voice_microphone_ask">O Happy precisa de acesso ao microfone para o chat de voz. Conceda a permissão quando for solicitado.</string>
+    <string name="voice_microphone_settings">O Happy precisa de acesso ao microfone para o chat de voz. Ative o acesso ao microfone nas configurações do dispositivo.</string>
 </resources>

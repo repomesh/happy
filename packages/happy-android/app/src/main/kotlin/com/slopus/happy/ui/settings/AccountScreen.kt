@@ -67,13 +67,6 @@ object AccountSpec {
     val secretText = happyTextStyle(fontSize = 15, lineHeight = 22, letterSpacing = 0.5f, family = AppMono)
 }
 
-/** account.tsx's push rows, spelled out in English there. */
-object PushRows {
-    const val PERMISSION = "Permission"
-    const val REQUEST = "Request Permission Again"
-    const val REREGISTER = "Re-register This Device"
-}
-
 /** What the push rows show (account.tsx's push state). */
 data class PushState(
     val permission: PushPermission? = null,
@@ -195,19 +188,19 @@ fun AccountScreen(
                 )
             }
 
-            // account.tsx's push rows, spelled out in English there.
-            ItemGroup(footer = "${PushText.subtitle(push.permission)} Shows every push token registered on your account. Tap an old token to delete it.") {
+            // account.tsx's push rows.
+            ItemGroup(footer = stringResource(PushText.subtitle(push.permission)) + " " + stringResource(R.string.push_tokens_hint)) {
                 val unsupported = push.permission?.status == PushPermissionStatus.Unsupported
                 Item(
-                    title = PushRows.PERMISSION,
-                    detail = PushText.label(push.permission),
+                    title = stringResource(R.string.push_permission),
+                    detail = stringResource(PushText.label(push.permission)),
                     icon = { SettingsTile(Ionicon.NotificationsOutline, SettingsTiles.red) },
                     loading = push.loading,
                     showChevron = false,
                     modifier = Modifier.revealRow(AccountTags.PUSH_PERMISSION),
                 )
                 Item(
-                    title = PushRows.REQUEST,
+                    title = stringResource(R.string.push_request_again),
                     icon = { SettingsTile(Ionicon.ShieldCheckmarkOutline, SettingsTiles.green) },
                     onClick = onRequestPush,
                     loading = push.requesting,
@@ -216,8 +209,8 @@ fun AccountScreen(
                     modifier = Modifier.revealRow(AccountTags.PUSH_REQUEST),
                 )
                 Item(
-                    title = PushRows.REREGISTER,
-                    subtitle = push.currentToken?.let { "Current token ${PushText.fingerprint(it)}" },
+                    title = stringResource(R.string.push_reregister),
+                    subtitle = push.currentToken?.let { stringResource(R.string.push_current_token, PushText.fingerprint(it)) },
                     icon = { SettingsTile(Ionicon.RefreshOutline, SettingsTiles.orange) },
                     onClick = onRefreshPush,
                     loading = push.refreshing,
@@ -228,20 +221,22 @@ fun AccountScreen(
             }
 
             ItemGroup(
-                footer = "Registered Tokens (${push.tokens.size}). Current-device metadata comes from this phone. Older tokens use their token fingerprint plus server timestamps.",
+                footer = stringResource(R.string.push_tokens_footer, push.tokens.size),
             ) {
                 if (push.tokens.isEmpty()) {
-                    Item(title = "No registered push tokens", titleColor = colors.textSecondary, showChevron = false)
+                    Item(title = stringResource(R.string.push_no_tokens), titleColor = colors.textSecondary, showChevron = false)
                 }
                 val cancel = stringResource(R.string.common_cancel)
                 val delete = stringResource(R.string.common_delete)
+                val thisDevice = stringResource(R.string.push_this_device)
+                val deleteTitle = stringResource(R.string.push_delete_title)
                 for (token in push.tokens) {
                     val current = push.currentToken == token.token
                     val fingerprint = PushText.fingerprint(token.token)
                     Item(
                         title = fingerprint,
-                        detail = if (current) "This device" else null,
-                        subtitle = PushText.tokenSubtitle(token, current, push.deviceLabel, push.appLabel),
+                        detail = if (current) thisDevice else null,
+                        subtitle = PushText.tokenSubtitle(resources, token, current, push.deviceLabel, push.appLabel),
                         subtitleLines = 0,
                         icon = { SettingsTile(if (current) Ionicon.PhonePortraitOutline else Ionicon.TrashOutline, if (current) SettingsTiles.gray else SettingsTiles.red) },
                         onClick = if (current) {
@@ -249,8 +244,8 @@ fun AccountScreen(
                         } else {
                             {
                                 alert = Alert(
-                                    "Delete Push Token",
-                                    "Remove $fingerprint from your account?",
+                                    deleteTitle,
+                                    resources.getString(R.string.push_delete_message, fingerprint),
                                     listOf(AlertButton(cancel), AlertButton(delete, destructive = true) { onDeletePushToken(token) }),
                                     cancelable = false,
                                 )
@@ -377,9 +372,9 @@ fun accountPageEntries(
         row(AccountTags.PUBLIC_ID, stringResource(R.string.settings_account_public_id), publicId ?: notAvailable),
         row(AccountTags.SERVER, stringResource(R.string.settings_account_server), server ?: stringResource(R.string.settings_default_server)),
         row(AccountTags.ANALYTICS, stringResource(R.string.settings_account_analytics)) { SettingsTile(Ionicon.AnalyticsOutline, SettingsTiles.blue) },
-        row(AccountTags.PUSH_PERMISSION, PushRows.PERMISSION) { SettingsTile(Ionicon.NotificationsOutline, SettingsTiles.red) },
-        row(AccountTags.PUSH_REQUEST, PushRows.REQUEST) { SettingsTile(Ionicon.ShieldCheckmarkOutline, SettingsTiles.green) },
-        row(AccountTags.PUSH_REREGISTER, PushRows.REREGISTER) { SettingsTile(Ionicon.RefreshOutline, SettingsTiles.orange) },
+        row(AccountTags.PUSH_PERMISSION, stringResource(R.string.push_permission)) { SettingsTile(Ionicon.NotificationsOutline, SettingsTiles.red) },
+        row(AccountTags.PUSH_REQUEST, stringResource(R.string.push_request_again)) { SettingsTile(Ionicon.ShieldCheckmarkOutline, SettingsTiles.green) },
+        row(AccountTags.PUSH_REREGISTER, stringResource(R.string.push_reregister)) { SettingsTile(Ionicon.RefreshOutline, SettingsTiles.orange) },
     )
 }
 

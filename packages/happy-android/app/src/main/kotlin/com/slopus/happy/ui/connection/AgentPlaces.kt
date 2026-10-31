@@ -55,6 +55,7 @@ import com.slopus.happy.chat.markdown.parseMarkdown
 import com.slopus.happy.chat.obj
 import com.slopus.happy.chat.str
 import com.slopus.happy.conversation.Conversation
+import com.slopus.happy.conversation.Problem
 import com.slopus.happy.conversation.ConversationApi
 import com.slopus.happy.conversation.Todo
 import com.slopus.happy.ui.artifacts.PlaceTags
@@ -66,6 +67,7 @@ import com.slopus.happy.ui.components.Icon
 import com.slopus.happy.ui.components.Ionicon
 import com.slopus.happy.ui.components.StatePage
 import com.slopus.happy.ui.conversation.conversationRequest
+import com.slopus.happy.ui.conversation.problemText
 import com.slopus.happy.ui.layout.LocalWindowLayout
 import com.slopus.happy.ui.layout.contentMaxWidth
 import com.slopus.happy.ui.theme.HappyTheme
@@ -93,7 +95,7 @@ object AgentPlacesTags {
 sealed interface PlaceRead<out T> {
     data object Reading : PlaceRead<Nothing>
     data class Ready<T>(val value: T) : PlaceRead<T>
-    data class Failed(val reason: String) : PlaceRead<Nothing>
+    data class Failed(val reason: Problem) : PlaceRead<Nothing>
 }
 
 /** What one Surface shows on the phone: a todo list, a document's Markdown, or a note to open it on the computer. */
@@ -182,7 +184,7 @@ internal fun AgentSurface(graph: AppGraph, nav: NavHostController, route: AgentS
     // The bar keeps up with a rename, as iOS's does.
     val feed = session?.feed?.collectAsStateWithLifecycle()?.value
     val name = feed?.rows?.firstNotNullOfOrNull { (it as? AgentFeedRow.Surface)?.takeIf { s -> s.id == route.surfaceId }?.name } ?: route.name
-    val read = reader?.state?.collectAsStateWithLifecycle()?.value ?: PlaceRead.Failed(stringResource(R.string.conversation_unavailable))
+    val read = reader?.state?.collectAsStateWithLifecycle()?.value ?: PlaceRead.Failed(Problem.Unavailable)
     SurfaceScreen(
         name = name,
         read = read,
@@ -212,7 +214,7 @@ fun SurfaceScreen(
             PlaceRead.Reading -> LoadingIndicator(Modifier.testTag(PlaceTags.LOADER))
             is PlaceRead.Failed -> StatePage(
                 title = stringResource(R.string.agent_surface_failed),
-                body = read.reason,
+                body = problemText(read.reason),
                 icon = Ionicon.CloudOfflineOutline,
                 action = stringResource(R.string.common_retry) to onRetry,
             )

@@ -75,7 +75,7 @@ class QrScannerActivity : ComponentActivity() {
         if (isFinishing) return
         when (result) {
             is ScanResult.Scanned -> setResult(RESULT_OK, Intent().putExtra(EXTRA_VALUE, result.value))
-            is ScanResult.Failed -> setResult(RESULT_FAILED, Intent().putExtra(EXTRA_FAILURE, result.reason))
+            is ScanResult.Failed -> setResult(RESULT_FAILED, Intent().putExtra(EXTRA_FAILURE, result.reason.name))
             ScanResult.Cancelled -> setResult(RESULT_CANCELED)
         }
         finish()
@@ -89,7 +89,9 @@ class QrScannerActivity : ComponentActivity() {
             val value = intent?.getStringExtra(EXTRA_VALUE)
             return when {
                 resultCode == RESULT_OK && value != null -> ScanResult.Scanned(value)
-                resultCode == RESULT_FAILED -> ScanResult.Failed(intent?.getStringExtra(EXTRA_FAILURE) ?: "Scan failed")
+                resultCode == RESULT_FAILED -> ScanResult.Failed(
+                    ScanFailure.entries.firstOrNull { it.name == intent?.getStringExtra(EXTRA_FAILURE) } ?: ScanFailure.CameraFailed,
+                )
                 else -> ScanResult.Cancelled
             }
         }
@@ -165,7 +167,7 @@ private fun CameraBinding(
     onSurfaceRequest: (SurfaceRequest) -> Unit,
     onCamera: (Camera?) -> Unit,
     onDecoded: (String) -> Unit,
-    onFailed: (String) -> Unit,
+    onFailed: (ScanFailure) -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -178,13 +180,13 @@ private fun CameraBinding(
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Camera unavailable", e)
-            currentOnFailed(e.message ?: "Camera unavailable")
+            currentOnFailed(ScanFailure.CameraFailed)
             return@LaunchedEffect
         }
         val selector = listOf(CameraSelector.DEFAULT_BACK_CAMERA, CameraSelector.DEFAULT_FRONT_CAMERA)
             .firstOrNull { runCatching { provider.hasCamera(it) }.getOrDefault(false) }
         if (selector == null) {
-            currentOnFailed("This device has no camera")
+            currentOnFailed(ScanFailure.NoCamera)
             return@LaunchedEffect
         }
         val preview = Preview.Builder().build().apply { setSurfaceProvider(onSurfaceRequest) }
@@ -208,7 +210,7 @@ private fun CameraBinding(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Camera failed to start", e)
-                currentOnFailed(e.message ?: "Camera failed to start")
+                currentOnFailed(ScanFailure.CameraFailed)
                 return@LaunchedEffect
             }
             awaitCancellation()

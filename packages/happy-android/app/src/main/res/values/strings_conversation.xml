@@ -95,4 +95,19 @@
     <string name="conversation_mode_permission_item">Permissions: %1$s</string>
     <string name="conversation_pictures_too_large_title">Pictures too large</string>
     <string name="conversation_pictures_too_large_message">Together these pictures are more than one message can carry. Remove some and send again.</string>
+    <!-- Conversation.describe's own words, where the agent gave none. -->
+    <string name="conversation_problem_refused">The agent refused this (%1$d).</string>
+    <string name="conversation_problem_unknown">Something went wrong.</string>
+    <string name="conversation_problem_pictures">Couldn\'t read the pictures to send.</string>
+    <!-- A failed turn, as desktop's failure card (conversationFailureMessage) words it. -->
+    <string name="conversation_failure_signin_missing">%1$s isn\'t signed in. Run `%2$s`, then retry.</string>
+    <string name="conversation_failure_cannot_authenticate">%1$s couldn\'t authenticate. Check its sign-in settings, then retry.</string>
+    <string name="conversation_failure_usage_limit">%1$s usage limit reached.</string>
+    <string name="conversation_failure_no_account">Every account in “%1$s” is out of usage.</string>
+    <string name="conversation_failure_rate_limited">%1$s is rate-limited. Try again in a minute.</string>
+    <string name="conversation_failure_provider_unavailable">%1$s is overloaded right now. Try again in a moment.</string>
+    <string name="conversation_failure_network">Couldn\'t reach %1$s. Check your connection, then retry.</string>
+    <string name="conversation_failure_context_too_long">This conversation is too long for %1$s, even after a reset.</string>
+    <string name="conversation_failure_provider_disabled">%1$s is turned off. Turn it on in Settings, then retry.</string>
+    <string name="conversation_failure_internal">Something went wrong: %1$s</string>
 </resources>
