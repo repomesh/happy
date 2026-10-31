@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,7 +56,10 @@ import com.slopus.happy.R
 import com.slopus.happy.agent.AgentFeed
 import com.slopus.happy.agent.AgentFeedRow
 import com.slopus.happy.agent.AgentLinkStatus
+import com.slopus.happy.ui.components.Alert
+import com.slopus.happy.ui.components.AlertButton
 import com.slopus.happy.ui.components.GlassBarLayout
+import com.slopus.happy.ui.components.HappyAlert
 import com.slopus.happy.ui.components.Icon
 import com.slopus.happy.ui.components.LoadingIndicator
 import com.slopus.happy.ui.components.LocalBarOnGlass
@@ -71,6 +75,7 @@ import com.slopus.happy.ui.home.rememberAccountMenu
 import com.slopus.happy.ui.layout.LocalWindowLayout
 import com.slopus.happy.ui.layout.contentMaxWidth
 import com.slopus.happy.ui.theme.HappyTheme
+import kotlinx.coroutines.launch
 
 /** Everything an agent connection's home asks of the app. */
 @Immutable
@@ -87,6 +92,12 @@ class AgentHomeActions(
     /** Opens the agent's artifacts, and one Surface. */
     val onOpenArtifacts: () -> Unit = {},
     val onOpenSurface: (AgentFeedRow.Surface) -> Unit = {},
+    /**
+     * Leaves a Surface ([com.slopus.happy.agent.AgentSession.leaveSurface]):
+     * null once left, else the agent's words for its refusal, empty where
+     * it gave none. Null here offers no Leave.
+     */
+    val onLeaveSurface: (suspend (AgentFeedRow.Surface) -> String?)? = null,
 )
 
 /** The colours of every bar on an agent connection's screens: the page's own [container], scrolled or not. */
@@ -166,6 +177,10 @@ fun AgentHomeScreen(
     var query by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
     val focus = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
+    // The Surface whose Leave waits on the confirm, and a refused one's name and the agent's reason.
+    var confirmingLeave by remember { mutableStateOf<AgentFeedRow.Surface?>(null) }
+    var leaveRefused by remember { mutableStateOf<Pair<String, String>?>(null) }
     val closeSearch = {
         focus.clearFocus()
         searching = false
@@ -257,6 +272,7 @@ fun AgentHomeScreen(
                         onOpen = actions.onOpenConversation,
                         onOpenArtifacts = actions.onOpenArtifacts,
                         onOpenSurface = actions.onOpenSurface,
+                        onLeaveSurface = actions.onLeaveSurface?.let { { surface: AgentFeedRow.Surface -> confirmingLeave = surface } },
                         // The list starts under the glass bar and scrolls on beneath it.
                         contentPadding = PaddingValues(top = top),
                         header = statusMessage(status)?.let { text ->
@@ -299,6 +315,59 @@ fun AgentHomeScreen(
                 )
             }
         }
+    }
+    LeaveSurfaceDialogs(
+        confirming = confirmingLeave,
+        refused = leaveRefused,
+        onConfirm = { surface ->
+            actions.onLeaveSurface?.let { leave ->
+                scope.launch { leave(surface)?.let { reason -> leaveRefused = surface.name to reason } }
+            }
+        },
+        onDismissConfirm = { confirmingLeave = null },
+        onDismissRefused = { leaveRefused = null },
+    )
+}
+
+/**
+ * Leaving a Surface, after its row's Leave: first "Leave “name”?" with what
+ * that does, Cancel or Leave; the row then goes at once. If the agent
+ * refuses, the row is back and "Couldn't leave “name”" says why, in the
+ * agent's words or, where it gave none, that it didn't answer (iOS shows
+ * the same words in home's notice).
+ */
+@Composable
+private fun LeaveSurfaceDialogs(
+    confirming: AgentFeedRow.Surface?,
+    refused: Pair<String, String>?,
+    onConfirm: (AgentFeedRow.Surface) -> Unit,
+    onDismissConfirm: () -> Unit,
+    onDismissRefused: () -> Unit,
+) {
+    if (confirming != null) {
+        HappyAlert(
+            Alert(
+                title = stringResource(R.string.surface_leave_title, confirming.name),
+                message = stringResource(R.string.surface_leave_message),
+                buttons = listOf(
+                    AlertButton(stringResource(R.string.common_cancel)),
+                    AlertButton(stringResource(R.string.surface_leave)) { onConfirm(confirming) },
+                ),
+                cancelable = false,
+            ),
+            onDismiss = onDismissConfirm,
+        )
+    }
+    if (refused != null) {
+        val (name, reason) = refused
+        HappyAlert(
+            Alert(
+                title = stringResource(R.string.surface_leave_failed, name),
+                message = reason.ifEmpty { stringResource(R.string.surface_leave_no_answer) },
+                buttons = listOf(AlertButton(stringResource(R.string.common_ok))),
+            ),
+            onDismiss = onDismissRefused,
+        )
     }
 }
 
@@ -449,7 +518,7 @@ fun AgentHome(
     val feed by session.feed.collectAsStateWithLifecycle()
     val status by session.status.collectAsStateWithLifecycle()
     val add = LocalAddFlow.current
-    val actions = remember(graph, onOpenConversation, onCompose, onSettings, onAppearance, onOpenArtifacts, onOpenSurface, add) {
+    val actions = remember(graph, session, onOpenConversation, onCompose, onSettings, onAppearance, onOpenArtifacts, onOpenSurface, add) {
         AgentHomeActions(
             onOpenConversation = onOpenConversation,
             onCompose = onCompose,
@@ -459,6 +528,7 @@ fun AgentHome(
             onAdd = { add?.scan() },
             onOpenArtifacts = onOpenArtifacts,
             onOpenSurface = onOpenSurface,
+            onLeaveSurface = { session.leaveSurface(it.id) },
         )
     }
     CompositionLocalProvider(LocalAgentPictures provides session.pictures) {

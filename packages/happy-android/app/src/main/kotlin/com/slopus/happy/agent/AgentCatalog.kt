@@ -130,6 +130,10 @@ data class AgentCatalog(
         return if (index == agents) this else copy(agents = index)
     }
 
+    /** The person left [surfaceId]: out of their list until a snapshot says otherwise. */
+    fun withoutSurface(surfaceId: String): AgentCatalog =
+        if (surfaceId in surfaces) copy(surfaces = surfaces - surfaceId) else this
+
     /** [event] applied, for the kinds home shows; anything else leaves the catalog as it is. */
     fun apply(event: AgentEvent): Applied {
         val data = event.data

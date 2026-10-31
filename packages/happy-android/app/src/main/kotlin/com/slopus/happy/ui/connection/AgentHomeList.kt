@@ -4,6 +4,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,8 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,12 +54,15 @@ import com.slopus.happy.agent.AgentFeedSection
 import com.slopus.happy.agent.AgentPictures
 import com.slopus.happy.agent.ConversationKind
 import com.slopus.happy.agent.FolderMark
+import com.slopus.happy.ui.components.HappyDropdownMenu
+import com.slopus.happy.ui.components.HappyMenuItem
 import com.slopus.happy.ui.components.HomeCardPlace
 import com.slopus.happy.ui.components.HomeCardRow
 import com.slopus.happy.ui.components.HomeCardSpec
 import com.slopus.happy.ui.components.HomeCardTags
 import com.slopus.happy.ui.components.Icon
 import com.slopus.happy.ui.components.Ionicon
+import com.slopus.happy.ui.components.MenuSpec
 import com.slopus.happy.ui.components.RemoteImage
 import com.slopus.happy.ui.components.ShimmerSpec
 import com.slopus.happy.ui.components.ShimmerText
@@ -89,6 +95,8 @@ object AgentHomeTags {
     const val ROW_MARK = "agentHome.rowMark"
     const val ROW_DIVIDER = HomeCardTags.DIVIDER
     const val ROW_DOT = "agentHome.rowDot"
+    /** A Surface row's held menu: Leave. */
+    const val LEAVE = "agentHome.leave"
 }
 
 /**
@@ -294,6 +302,8 @@ fun LazyListScope.agentHomeRows(
     onOpen: (String) -> Unit,
     onOpenArtifacts: () -> Unit,
     onOpenSurface: (AgentFeedRow.Surface) -> Unit,
+    /** A Surface row's hold offers Leave, which comes here; null offers nothing. */
+    onLeaveSurface: ((AgentFeedRow.Surface) -> Unit)? = null,
 ) {
     items(items, key = { it.key }, contentType = { (it as? AgentHomeItem.Row)?.row?.let { row -> row::class } ?: it::class }) { item ->
         val motion = if (reduceMotion) Modifier else Modifier.animateItem(
@@ -313,9 +323,7 @@ fun LazyListScope.agentHomeRows(
                     is AgentFeedRow.Conversation -> ConversationRow(row, onOpen)
                     is AgentFeedRow.Folder -> FolderRow(row)
                     AgentFeedRow.Artifacts -> PlaceRow(stringResource(R.string.agent_home_artifacts), Ionicon.DocumentTextOutline, RowTile.Purple, onOpenArtifacts)
-                    is AgentFeedRow.Surface -> RowTile.surface(row.type).let { (glyph, tile) ->
-                        PlaceRow(row.name, glyph, tile) { onOpenSurface(row) }
-                    }
+                    is AgentFeedRow.Surface -> SurfaceRow(row, { onOpenSurface(row) }, onLeaveSurface)
                     is AgentFeedRow.Section -> Unit
                 }
             }
@@ -388,13 +396,40 @@ private fun ConversationRow(row: AgentFeedRow.Conversation, onOpen: (String) -> 
     }
 }
 
+/**
+ * A Surface's row. Held, it offers Leave in a drop-down under it, as iOS's
+ * held row and desktop's menu do (the close glyph, not in red); the screen
+ * asks before it leaves ([onLeave]).
+ */
+@Composable
+private fun SurfaceRow(row: AgentFeedRow.Surface, onOpen: () -> Unit, onLeave: ((AgentFeedRow.Surface) -> Unit)?) {
+    var menu by remember { mutableStateOf(false) }
+    val (glyph, tile) = RowTile.surface(row.type)
+    Box(Modifier.fillMaxSize()) {
+        PlaceRow(row.name, glyph, tile, onOpen, onLongClick = onLeave?.let { { menu = true } })
+        if (onLeave != null) {
+            HappyDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                HappyMenuItem(
+                    label = stringResource(R.string.surface_leave),
+                    leading = { Icon(Ionicon.Close, MenuSpec.icon, HappyTheme.colors.text) },
+                    onClick = {
+                        menu = false
+                        onLeave(row)
+                    },
+                    modifier = Modifier.testTag(AgentHomeTags.LEAVE),
+                )
+            }
+        }
+    }
+}
+
 /** Artifacts, or a Surface: its glyph on its tile, and its name. */
 @Composable
-private fun PlaceRow(name: String, glyph: Ionicon, tile: RowTile, onClick: () -> Unit) {
+private fun PlaceRow(name: String, glyph: Ionicon, tile: RowTile, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .clickable(role = Role.Button, onClick = onClick)
+            .combinedClickable(role = Role.Button, onClick = onClick, onLongClick = onLongClick)
             .padding(start = AgentHomeSpec.markInset, end = AgentHomeSpec.paddingEnd),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -479,6 +514,7 @@ fun AgentHomeList(
     modifier: Modifier = Modifier,
     onOpenArtifacts: () -> Unit = {},
     onOpenSurface: (AgentFeedRow.Surface) -> Unit = {},
+    onLeaveSurface: ((AgentFeedRow.Surface) -> Unit)? = null,
     header: (LazyListScope.() -> Unit)? = null,
     bottom: @Composable () -> Unit = {},
 ) {
@@ -489,7 +525,7 @@ fun AgentHomeList(
         contentPadding = contentPadding,
     ) {
         header?.invoke(this)
-        agentHomeRows(items, reduceMotion, onOpen, onOpenArtifacts, onOpenSurface)
+        agentHomeRows(items, reduceMotion, onOpen, onOpenArtifacts, onOpenSurface, onLeaveSurface)
         item(key = "bottom", contentType = "bottom") { bottom() }
     }
 }

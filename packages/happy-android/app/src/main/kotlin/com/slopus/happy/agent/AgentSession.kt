@@ -6,7 +6,9 @@ import com.slopus.happy.connection.AgentIdentity
 import com.slopus.happy.connection.TailcatTransport
 import com.slopus.happy.connection.Transport
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -35,6 +38,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.scan
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -109,9 +113,11 @@ class AgentSession internal constructor(
      */
     val events: SharedFlow<AgentEvent> = eventFlow.asSharedFlow()
 
+    /** The Surfaces being left, each with the agent's answer on its way ([leaveSurface]). */
+    private val leaving = MutableStateFlow<Map<String, Deferred<String?>>>(emptyMap())
+
     /** Home's rows, derived off the main thread; equal rows keep their instances. */
-    val feed: StateFlow<AgentFeed> = catalogState
-        .map { AgentFeed.derive(it) }
+    val feed: StateFlow<AgentFeed> = combine(catalogState, leaving) { catalog, leaving -> AgentFeed.derive(catalog, leaving.keys) }
         .distinctUntilChanged()
         .scan(null as AgentFeed?) { previous, next -> AgentFeed.reuse(previous, next) }
         // The seed is no feed: never shown, so a cached home never blinks empty.
@@ -169,6 +175,39 @@ class AgentSession internal constructor(
     /** A task as `POST /v0/tasks` answered (`task`, and its `membership`): home lists it before `task.created` comes. */
     fun upsertTask(task: JsonObject, membership: JsonObject? = null) {
         catalogState.update { it.withTask(task, membership) }
+    }
+
+    /**
+     * Leaves a Surface (`POST /v0/surfaces/:id/leave`), as iOS's
+     * `leave(surfaceId:)`: its row goes from home at once and comes back if
+     * the agent refuses. It takes the Surface out of the person's own list;
+     * its content stays for everyone in it. A second ask while one is on its
+     * way sends nothing and shares its answer. Gone already on the agent
+     * (404) counts as left. Null once left; otherwise the agent's own words
+     * for the refusal, empty where it gave none (the screen says it in its
+     * own). The request runs in the session, so leaving the screen doesn't
+     * cancel it.
+     */
+    suspend fun leaveSurface(surfaceId: String): String? {
+        val answer = CompletableDeferred<String?>()
+        val pending = leaving.updateAndGet { if (surfaceId in it) it else it + (surfaceId to answer) }.getValue(surfaceId)
+        if (pending !== answer) return pending.await()
+        scope.launch {
+            val refusal = try {
+                client.send("POST", "/v0/surfaces/${AgentClient.escape(surfaceId)}/leave", buildJsonObject { put("mutationId", AgentClient.newId()) })
+                null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AgentApiException) {
+                if (e.status == 404) null else e.message.orEmpty()
+            } catch (_: Exception) {
+                ""
+            }
+            if (refusal == null) catalogLock.withLock { catalogState.update { it.withoutSurface(surfaceId) } }
+            leaving.update { it - surfaceId }
+            answer.complete(refusal)
+        }.invokeOnCompletion { cause -> if (cause != null) answer.complete("") }
+        return answer.await()
     }
 
     init {

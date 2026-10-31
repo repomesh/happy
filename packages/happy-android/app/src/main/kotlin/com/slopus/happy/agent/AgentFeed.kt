@@ -136,9 +136,10 @@ data class AgentFeed(val loaded: Boolean = false, val rows: List<AgentFeedRow> =
          * works in is listed under that subtask only. Archived ones, hidden
          * subagents and Stem Cells' Surfaces are left out, and the projects
          * altogether while the person hides them on the desktop
-         * ([AgentCatalog.projectsHidden]).
+         * ([AgentCatalog.projectsHidden]), and the Surfaces being left
+         * ([leaving]), gone at once while the agent is asked.
          */
-        fun derive(catalog: AgentCatalog): AgentFeed {
+        fun derive(catalog: AgentCatalog, leaving: Set<String> = emptySet()): AgentFeed {
             if (!catalog.loaded) return Empty
             val rows = ArrayList<AgentFeedRow>()
             val shown = HashSet<String>()
@@ -222,7 +223,7 @@ data class AgentFeed(val loaded: Boolean = false, val rows: List<AgentFeedRow> =
                     }
                     .sortedWith(compareBy({ it.second }, { it.first.string("id") }))
                     .forEach { (surface, _) ->
-                        val id = surface.string("id") ?: return@forEach
+                        val id = surface.string("id")?.takeIf { it !in leaving } ?: return@forEach
                         rows += AgentFeedRow.Surface(id, surface.string("name").orEmpty(), surface.string("type").orEmpty())
                     }
             }
