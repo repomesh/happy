@@ -144,7 +144,7 @@ final class HostedContextLimitsTests: XCTestCase {
         self.window = window
         window.layoutIfNeeded()
         card = try XCTUnwrap(views(chat.view).compactMap { $0 as? AgentInputCardView }.first)
-        try await wait { self.session.models.catalog != nil && self.chip(.model)?.isHidden == false }
+        try await wait { self.session.models.catalog != nil && self.card.configuration.model != nil && self.chip(.model)?.isHidden == false }
     }
 
     private func event(_ type: String, _ payload: [String: JSONValue]) async {
